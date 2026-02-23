@@ -1,0 +1,448 @@
+﻿// This code is based on the one provided in: https://github.com/franklinwk/OpenIGTLink-Unity
+// Modified by Alicia Pose Díez de la Lastra, from Universidad Carlos III de Madrid
+
+using UnityEngine;
+using System;
+using System.Net;
+using System.IO;
+using System.Net.Sockets;
+using System.Text;
+using System.Collections;
+using System.Threading;
+using System.Collections.Generic;
+using UnityEngine.Networking;
+using UnityEngine.UI;
+using System.Runtime;
+
+
+
+public class OpenIGTLinkConnect : MonoBehaviour
+{
+    ///////// CONNECT TO 3D SLICER PARAMETERS /////////
+    uint headerSize = 58; // Size of the header of every OpenIGTLink message
+    private SocketHandler socketForUnityAndMetaQuest; // Socket to connect to Slicer
+    bool isConnected; // Boolean to check if the socket is connected
+    public string ipString; // IP address of the computer running Slicer
+    public int port; // Port of the computer running Slicer
+    public bool connectOnStart = true; // Connect automatically on Start
+
+
+    ///////// GENERAL VARIABLES /////////
+    int scaleMultiplier = 200; // Help variable to transform meters to millimeters and vice versa
+
+
+    ///////// SEND /////////
+    public List<ModelInfo> infoToSend; // Array of Models to send to Slicer
+
+    /// CRC ECMA-182 to send messages to Slicer ///
+    CRC64 crcGenerator;
+    string CRC;
+    ulong crcPolynomial;
+    string crcPolynomialBinary = "0100001011110000111000011110101110101001111010100011011010010011";
+
+
+    ///////// LISTEN /////////
+
+    /// Image transfer information ///
+    public GameObject movingPlane; // Plane to display image on
+    Material mediaMaterial; // Material of the plane
+    Texture2D mediaTexture; // Texture of the plane
+
+    public GameObject fixPlane; // Fix plane to display image on
+    Material fixPlaneMaterial; // Material of the plane
+
+
+    /// <summary>
+    /// Imposta il piano mobile che riceverà le immagini dalle slice
+    /// </summary>
+    public void SetMovingPlane(GameObject plane)
+    {
+        movingPlane = plane;
+        if (movingPlane != null)
+        {
+            // Nessuna inversione della scala Y
+            mediaMaterial = movingPlane.GetComponent<MeshRenderer>().material;
+            mediaTexture = new Texture2D(512, 512, TextureFormat.Alpha8, false);
+            mediaMaterial.mainTexture = mediaTexture;
+            
+            // Forza le impostazioni texture per coprire tutto il piano
+            mediaMaterial.mainTextureScale = Vector2.one;
+            mediaMaterial.mainTextureOffset = Vector2.zero;
+            
+            Debug.Log($"[OpenIGTLinkConnect] Piano mobile impostato: {movingPlane.name}");
+        }
+    }
+
+    void Start()
+    {
+        // Initialize CRC Generator
+        crcGenerator = new CRC64();
+        crcPolynomial = Convert.ToUInt64(crcPolynomialBinary, 2);
+        crcGenerator.Init(crcPolynomial);
+
+        // Initialize texture parameters for image transfer of the moving plane
+        // Solo se movingPlane è già stato assegnato nell'Inspector
+        if (movingPlane != null)
+        {
+            // Nessuna inversione della scala Y
+            mediaMaterial = movingPlane.GetComponent<MeshRenderer>().material;
+            mediaTexture = new Texture2D(512, 512, TextureFormat.Alpha8, false);
+            mediaMaterial.mainTexture = mediaTexture;
+            
+            // Forza le impostazioni texture per coprire tutto il piano
+            mediaMaterial.mainTextureScale = Vector2.one;
+            mediaMaterial.mainTextureOffset = Vector2.zero;
+        }
+
+        // Initialize texture parameters for image transfer of the fix plane
+        GameObject fixedImagePlane = GameObject.Find("FixedImagePlane");
+        if (fixedImagePlane != null)
+        {
+            fixPlane = fixedImagePlane.transform.Find("FixPlane").gameObject;
+            if (fixPlane != null)
+            {
+                // Nessuna inversione della scala Y
+                fixPlaneMaterial = fixPlane.GetComponent<MeshRenderer>().material;
+                
+                // Forza le impostazioni texture per coprire tutto il piano
+                fixPlaneMaterial.mainTextureScale = Vector2.one;
+                fixPlaneMaterial.mainTextureOffset = Vector2.zero;
+                
+                if (mediaTexture != null)
+                {
+                    fixPlaneMaterial.mainTexture = mediaTexture;
+                }
+            }
+        }
+
+        // Posiziona il piano fisso nell'angolo in alto a destra
+        Vector3 screenPos = new Vector3(0.171000004f, 0.261999995f, 0.425000012f);
+
+        Transform modelsTransform = GameObject.Find("Models")?.transform;
+        if (modelsTransform != null)
+        {
+            Transform skinModelTransform = modelsTransform.Find("skin_model");
+
+            if (skinModelTransform != null)
+            {
+                GameObject fixedModel = skinModelTransform.gameObject;
+                Renderer modelRenderer = fixedModel.GetComponentInChildren<Renderer>();
+
+                if (modelRenderer != null && fixedImagePlane != null)
+                {
+                    Vector3 modelCenter = modelRenderer.bounds.center;
+                    float verticalOffset = 0.3f;
+                    Vector3 newPos = modelCenter + new Vector3(0f, verticalOffset, 0f);
+
+                    fixedImagePlane.transform.position = newPos;
+                }
+            }
+        }
+
+        if (connectOnStart)
+        {
+            OnConnectToSlicerClick(ipString, port);
+        }
+    }
+
+    // This function is called when the user activates the connectivity switch to start the communication with 3D Slicer
+    public bool OnConnectToSlicerClick(string ipString, int port)
+    {
+        isConnected = ConnectToSlicer(ipString, port);
+        return isConnected;
+    }
+
+    // Create a new socket handler and connect it to the server with the ip address and port provided in the function
+    bool ConnectToSlicer(string ipString, int port)
+    {
+        socketForUnityAndMetaQuest = new SocketHandler();
+
+        Debug.Log("ipString: " + ipString);
+        Debug.Log("port: " + port);
+        bool isConnected = socketForUnityAndMetaQuest.Connect(ipString, port);
+        Debug.Log("Connected: " + isConnected);
+
+        if (isConnected)
+        {
+            StartCoroutine(ListenSlicerInfo());
+            StartCoroutine(SendTransformInfo());
+        }
+
+        return isConnected;
+
+    }
+
+    // Routine that continuously sends the transform information of every model in infoToSend to 3D Slicer
+    public IEnumerator SendTransformInfo()
+    {
+        while (true)
+        {
+            // Debug.Log("Sending...");
+            yield return null; // If you had written yield return new WaitForSeconds(1); it would have waited 1 second before executing the code below.
+            // Loop foreach element in infoToSend
+            foreach (ModelInfo element in infoToSend)
+            {
+                SendMessageToServer.SendTransformMessage(element, scaleMultiplier, crcGenerator, CRC, socketForUnityAndMetaQuest);
+            }
+        }
+    }
+
+    // Routine that continuously listents to the incoming information from 3D Slicer. In the present code, this information could be in the form of a transform or an image message
+    public IEnumerator ListenSlicerInfo()
+    {
+        while (true)
+        {
+            // Debug.Log("Listening..."); // Commented out to reduce spam
+            yield return null;
+
+            ////////// READ THE HEADER OF THE INCOMING MESSAGES //////////
+            byte[] iMSGbyteArray = socketForUnityAndMetaQuest.Listen(headerSize);
+
+            // Log only if we receive something substantial
+            if (iMSGbyteArray.Length > 0)
+            {
+                // Debug.Log($"Received bytes: {iMSGbyteArray.Length}");
+            }
+
+            if (iMSGbyteArray.Length >= (int)headerSize)
+            {
+                ////////// READ THE HEADER OF THE INCOMING MESSAGES //////////
+                // Store the information of the header in the structure iHeaderInfo
+                ReadMessageFromServer.HeaderInfo iHeaderInfo = ReadMessageFromServer.ReadHeaderInfo(iMSGbyteArray);
+
+                ////////// READ THE BODY OF THE INCOMING MESSAGES //////////
+                // Get the size of the body from the header information
+                // Verifica che bodySize non sia troppo grande (max 100MB per sicurezza)
+                if (iHeaderInfo.bodySize > 100 * 1024 * 1024)
+                {
+                    Debug.LogWarning($"[OpenIGTLink] Messaggio troppo grande ricevuto: {iHeaderInfo.bodySize} bytes. Scartato.");
+                    continue;
+                }
+                
+                uint bodySize = (uint)iHeaderInfo.bodySize;
+
+                // Process the message when it is complete (that means, we have received as many bytes as the body size + the header size)
+                if (iMSGbyteArray.Length >= (int)bodySize + (int)headerSize)
+                {
+                    // Compare different message types and act accordingly
+                    if ((iHeaderInfo.msgType).Contains("TRANSFORM"))
+                    {
+                        // Extract the transform matrix from the message
+                        Matrix4x4 matrix = ReadMessageFromServer.ExtractTransformInfo(iMSGbyteArray, movingPlane, scaleMultiplier, (int)iHeaderInfo.headerSize);
+                        // Apply the transform matrix to the object
+                        ApplyTransformToGameObject(matrix, movingPlane);
+                    }
+
+                    else if ((iHeaderInfo.msgType).Contains("IMAGE"))
+                    {
+                        // Read and apply the image content to our preview plane
+                        ApplyImageInfo(iMSGbyteArray, iHeaderInfo);
+                    }
+                    else if ((iHeaderInfo.msgType).Contains("STATUS"))
+                    {
+                        // STATUS message (keepalive)
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"Unknown or unhandled message type: {iHeaderInfo.msgType}");
+                    }
+                }
+                else
+                {
+                    // Debug.LogWarning($"Incomplete message. Have {iMSGbyteArray.Length}, need {bodySize + headerSize}");
+                }
+            }
+        }
+    }
+
+    /// Apply transform information to GameObject ///
+    void ApplyTransformToGameObject(Matrix4x4 matrix, GameObject gameObject)
+    {
+        Vector3 translation = matrix.GetColumn(3);
+        //gameObject.transform.localPosition = new Vector3(-translation.x, translation.y, translation.z);
+        //Vector3 rotation= matrix.rotation.eulerAngles;
+        //gameObject.transform.localRotation = Quaternion.Euler(rotation.x, -rotation.y, -rotation.z);
+        if (translation.x > 10000 || translation.y > 10000 || translation.z > 10000)
+        {
+            gameObject.transform.position = new Vector3(0, 0, 0.5f);
+            Debug.Log("Out of limits. Default position assigned.");
+        }
+        else
+        {
+            gameObject.transform.localPosition = new Vector3(-translation.x, translation.y, translation.z);
+            Vector3 rotation = matrix.rotation.eulerAngles;
+            gameObject.transform.localRotation = Quaternion.Euler(rotation.x, -rotation.y, -rotation.z);
+        }
+    }
+
+    //////////////////////////////// INCOMING IMAGE MESSAGE ////////////////////////////////
+//////////////////////////////// INCOMING IMAGE MESSAGE ////////////////////////////////
+void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHeaderInfo)
+    {
+        ReadMessageFromServer.ImageInfo iImageInfo = ReadMessageFromServer.ReadImageInfo(iMSGbyteArray, headerSize, iHeaderInfo.extHeaderSize);
+        
+        if (iImageInfo.numPixX > 0 && iImageInfo.numPixY > 0)
+        {
+            if (movingPlane == null) return;
+
+            // --- 1. SETUP TEXTURE (Standard) ---
+            mediaMaterial = movingPlane.GetComponent<MeshRenderer>().material;
+            
+            if (mediaTexture == null || mediaTexture.width != iImageInfo.numPixX || mediaTexture.height != iImageInfo.numPixY)
+            {
+                 mediaTexture = new Texture2D(iImageInfo.numPixX, iImageInfo.numPixY, TextureFormat.RGB24, false);
+                 mediaTexture.wrapMode = TextureWrapMode.Clamp; 
+                 mediaTexture.filterMode = FilterMode.Bilinear;
+            }
+
+            if (fixPlane != null)
+                fixPlaneMaterial = fixPlane.GetComponent<MeshRenderer>().material;
+
+            // --- 2. CARICAMENTO PIXEL (Standard) ---
+            byte[] bodyArray_iImData = new byte[iImageInfo.numPixX * iImageInfo.numPixY];
+            byte[] bodyArray_RGB = new byte[iImageInfo.numPixX * iImageInfo.numPixY * 3];
+
+            Buffer.BlockCopy(iMSGbyteArray, iImageInfo.offsetBeforeImageContent, bodyArray_iImData, 0, bodyArray_iImData.Length);
+
+            for (int i = 0; i < bodyArray_iImData.Length; i++)
+            {
+                byte pixelVal = bodyArray_iImData[i];
+                bodyArray_RGB[i * 3] = pixelVal;
+                bodyArray_RGB[i * 3 + 1] = pixelVal;
+                bodyArray_RGB[i * 3 + 2] = pixelVal;
+            }
+
+            mediaTexture.LoadRawTextureData(bodyArray_RGB);
+            mediaTexture.Apply();
+            
+            // --- 3. GESTIONE GEOMETRIA: FORZIAMO IL QUADRATO ---
+            // Ignoriamo le dimensioni dell'immagine. Usiamo la Scale Y impostata in Unity per fare un quadrato.
+            
+            // A. Moving Plane (Quadrato)
+            float size = Mathf.Abs(movingPlane.transform.localScale.y);
+            float signX = Mathf.Sign(movingPlane.transform.localScale.x); // Mantiene orientamento
+            movingPlane.transform.localScale = new Vector3(size * signX, size, movingPlane.transform.localScale.z);
+
+            // B. Fix Plane (Quadrato)
+            if (fixPlane != null)
+            {
+                float fixSize = Mathf.Abs(fixPlane.transform.localScale.y);
+                fixPlane.transform.localScale = new Vector3(fixSize, fixSize, fixPlane.transform.localScale.z);
+            }
+
+            // --- 4. CALCOLO UV PER "ZOOM & CROP" (Riempi il quadrato) ---
+            // Calcoliamo i rapporti d'aspetto
+            float imageAspect = (float)iImageInfo.numPixX / (float)iImageInfo.numPixY; // Es. 1.86 (Larga)
+            float planeAspect = 1.0f; // Poiché abbiamo forzato il quadrato qui sopra
+
+            // Fattore di scala per la texture
+            Vector2 scaleUV = Vector2.one;
+            Vector2 offsetUV = Vector2.zero;
+
+            // Se l'immagine è più larga del piano (il tuo caso: 1.86 > 1.0)
+            if (imageAspect > planeAspect)
+            {
+                // Dobbiamo mostrare solo la parte centrale orizzontale
+                float scaleFactor = planeAspect / imageAspect; // Es. 1.0 / 1.86 = 0.53
+                scaleUV.x = scaleFactor;
+                scaleUV.y = 1;
+                
+                // Centriamo la texture (crop laterale)
+                offsetUV.x = (1 - scaleFactor) / 2;
+                offsetUV.y = 0;
+            }
+            // Se l'immagine è più alta del piano
+            else
+            {
+                // Dobbiamo mostrare solo la parte centrale verticale
+                float scaleFactor = imageAspect / planeAspect;
+                scaleUV.x = 1;
+                scaleUV.y = scaleFactor;
+                
+                // Centriamo la texture (crop verticale)
+                offsetUV.x = 0;
+                offsetUV.y = (1 - scaleFactor) / 2;
+            }
+
+            // --- 5. APPLICAZIONE AI MATERIALI ---
+            
+            // PIANO MOBILE (Con Mirroring X)
+            mediaMaterial.mainTexture = mediaTexture;
+            // Nota: Per il mirroring moltiplichiamo scale X per -1.
+            // L'offset per il mirroring con crop è: (1 + scaleFactor) / 2 se partiamo da sinistra, 
+            // ma con il codice semplificato sopra, invertiamo semplicemente la logica:
+            
+            if (imageAspect > planeAspect) 
+            {
+                // Fix matematico specifico per il Mirroring + Crop
+                float scaleFactor = planeAspect / imageAspect;
+                mediaMaterial.mainTextureScale = new Vector2(-scaleFactor, 1);
+                // Offset corretto per centrare una texture specchiata
+                mediaMaterial.mainTextureOffset = new Vector2((1 + scaleFactor) / 2, 0); 
+            }
+            else
+            {
+                mediaMaterial.mainTextureScale = new Vector2(-1, scaleUV.y);
+                mediaMaterial.mainTextureOffset = new Vector2(1, offsetUV.y);
+            }
+
+
+            // PIANO FISSO (Senza Mirroring - Normale)
+            if (fixPlaneMaterial != null)
+            {
+                fixPlaneMaterial.mainTexture = mediaTexture;
+                fixPlaneMaterial.mainTextureScale = scaleUV;
+                fixPlaneMaterial.mainTextureOffset = offsetUV;
+            }
+        }
+    }
+
+
+    // Called when the user disconnects Unity from 3D Slicer using the connectivity switch
+    public void OnDisconnectClick()
+    {
+        StopAllCoroutines();
+        socketForUnityAndMetaQuest.Disconnect();
+        Debug.Log("Disconnected from the server");
+    }
+
+
+    // Execute this function when the user exits the application
+    void OnApplicationQuit()
+    {
+        // Release the socket.
+        if (socketForUnityAndMetaQuest != null)
+        {
+            socketForUnityAndMetaQuest.Disconnect();
+        }
+    }
+
+    // Aggiungi questo metodo dentro la classe OpenIGTLinkConnect
+// In OpenIGTLinkConnect.cs
+
+public void RegisterDynamicModel(GameObject objToSend, string nameInSlicer)
+{
+    // Se la lista non è inizializzata, creala
+    if (infoToSend == null) infoToSend = new List<ModelInfo>();
+
+    // Controlla se esiste già per evitare duplicati
+    foreach (var model in infoToSend)
+    {
+        // CORREZIONE QUI: Usa _gameObject invece di gameObject
+        if (model._gameObject == objToSend) return;
+    }
+
+    // Crea il nuovo info
+    ModelInfo newInfo = new ModelInfo();
+    
+    // CORREZIONI QUI: Usa le variabili col trattino basso come definite nella tua classe ModelInfo
+    newInfo._gameObject = objToSend;
+    newInfo._name = nameInSlicer; 
+    newInfo._color = "White"; // Impostiamo un colore di default per evitare problemi
+    
+    // Aggiungilo alla lista di invio
+    infoToSend.Add(newInfo);
+    
+    Debug.Log($"[OpenIGTLink] Registrato modello dinamico da inviare: {nameInSlicer}");
+}
+}
