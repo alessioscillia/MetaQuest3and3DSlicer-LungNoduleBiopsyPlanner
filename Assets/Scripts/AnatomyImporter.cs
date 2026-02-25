@@ -97,13 +97,8 @@ public class AnatomyImporter : MonoBehaviour
                  // Conversione in locale per i vincoli dello slider
                  Vector3 skinMinLocal = slicerInstance.transform.InverseTransformPoint(skinBounds.min);
                  Vector3 skinMaxLocal = slicerInstance.transform.InverseTransformPoint(skinBounds.max);
-                 
-                 // Debug: Vediamo dove siamo finiti
-                 Debug.Log($"[Universal Setup] Slice Start Y: {worldStartPosition.y}m. (Corrisponde a {worldStartPosition.y * 200}mm su Slicer)");
 
-                 // IMPORTANTE: Invertiamo i limiti per mappare correttamente:
-                 // - Piano in alto (max.y) → slice 0 → -10mm
-                 // - Piano in basso (min.y) → ultima slice → -340mm
+                 // Inizializza i vincoli: X e Y bloccati, Z libero
                  controller.InitializeConstraints(skinMaxLocal.y, skinMinLocal.y);
 
                 // Connessione OpenIGTLink
@@ -120,7 +115,6 @@ public class AnatomyImporter : MonoBehaviour
         }
     }
 
-    // ... (Mantieni le funzioni AutomateMaterialSetup e helper materiali identiche a prima) ...
 void AutomateMaterialSetup(GameObject loadedModel)
     {
         MeshRenderer[] renderers = loadedModel.GetComponentsInChildren<MeshRenderer>();

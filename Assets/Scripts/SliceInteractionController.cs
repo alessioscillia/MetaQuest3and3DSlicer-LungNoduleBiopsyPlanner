@@ -30,7 +30,7 @@ public class SliceInteractionController : MonoBehaviour
     private int _currentSliceIndex = 0;
     private float _sliceStepSize = 0f;
 
-    // Chiama questo metodo dal tuo AnatomyImporter dopo aver calcolato i bounds del polmone
+    // Chiama questo metodo dal tuo AnatomyImporter per configurare il movimento
     public void InitializeConstraints(float minZ, float maxZ)
     {
         _minZ = minZ;
@@ -38,20 +38,16 @@ public class SliceInteractionController : MonoBehaviour
 
         if (translateTransformer != null)
         {
-            // Impostiamo i vincoli di movimento dell'Interaction SDK a runtime
             var constraints = translateTransformer.Constraints;
             
-            // Usiamo i limiti Z del polmone per l'asse Z del cubo (SENZA divisione)
-            constraints.MinZ.Value = _minZ;
-            constraints.MaxZ.Value = _maxZ;
-            constraints.MinZ.Constrain = true;
-            constraints.MaxZ.Constrain = true;
+            // Z libero (nessun limite di altezza)
+            constraints.MinZ.Constrain = false;
+            constraints.MaxZ.Constrain = false;
 
             // Blocca X e Y alla posizione CORRENTE del cubo (non a 0)
             float currentX = transform.localPosition.x;
             float currentY = transform.localPosition.y;
             
-            // Salva i valori fissi
             _fixedX = currentX;
             _fixedY = currentY;
             _constraintsInitialized = true;
@@ -72,7 +68,7 @@ public class SliceInteractionController : MonoBehaviour
             float totalRange = _maxZ - _minZ;
             _sliceStepSize = totalRange / Mathf.Max(1, totalSlices - 1);
             
-            Debug.Log($"[SliceInteraction] Vincoli impostati - X fisso: {_fixedX:F3}, Y fisso: {_fixedY:F3}, Z range: {_minZ:F3} a {_maxZ:F3}");
+            Debug.Log($"[SliceInteraction] Vincoli impostati - X fisso: {_fixedX:F3}, Y fisso: {_fixedY:F3}, Z illimitato");
             Debug.Log($"[SliceInteraction] {totalSlices} slice, step size: {_sliceStepSize:F4} unità");
         }
     }
