@@ -18,7 +18,7 @@ using System.Linq;
 
 public class SendMessageToServer : MonoBehaviour
 {
-    public static void SendTransformMessage(ModelInfo model_InspectorInfo, int scaleMultiplier, CRC64 crcGenerator, string CRC, SocketHandler socketForUnityAndMetaQuest)
+    public static void SendTransformMessage(ModelInfo model_InspectorInfo, int scaleMultiplier, CRC64 crcGenerator, string CRC, SocketHandler socketForUnityAndMetaQuest, Vector3 slicerPositionOffset)
     {
         ////////////// Get myModel properties
         string modelName = model_InspectorInfo._name;
@@ -62,8 +62,11 @@ public class SendMessageToServer : MonoBehaviour
         var adaptedRotationFromDeviceToSlicer = new Vector3(-myOBJRotation.x, myOBJRotation.y, -myOBJRotation.z);
         var rotationForSlicer = Quaternion.Euler(adaptedRotationFromDeviceToSlicer);
 
-        // Obtain a 4x4 matrix with all the pose information of myOBJ, including the minus (-) sign in the x axis of rotation
-        Matrix4x4 matrix = Matrix4x4.TRS(modelGO.transform.localPosition, rotationForSlicer, modelGO.transform.localScale);
+        // 2. APPLICA L'OFFSET ALLA POSIZIONE
+        Vector3 positionForSlicer = modelGO.transform.localPosition + slicerPositionOffset;
+
+        // 3. USA LA POSIZIONE SFALSATA PER CREARE LA MATRICE
+        Matrix4x4 matrix = Matrix4x4.TRS(positionForSlicer, rotationForSlicer, modelGO.transform.localScale);;
 
         // Invertiamo la prima colonna (asse X) per correggere il ribaltamento destra/sinistra su Slicer
         float m00 = -matrix.GetRow(0)[0];

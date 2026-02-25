@@ -16,7 +16,7 @@ public class SliceInteractionController : MonoBehaviour
 
     [Header("Slice Discretization")]
     [Tooltip("Numero totale di slice nel volume CT (da Slicer)")]
-    public int totalSlices = 133;
+    public int totalSlices = 140;
     
     [Tooltip("Abilita movimento discreto (ogni step = 1 slice)")]
     public bool useDiscreteSlices = true;

@@ -41,13 +41,12 @@ public class AnatomyImporter : MonoBehaviour
             // NON spostare il modello. Lascialo a (0,0,0).
             // In questo modo, l'origine del file GLTF coincide perfettamente con l'origine del Mondo Unity.
             // Qualsiasi coordinata contenuta nel file (che sia -10, -340 o +1000) sarà rispettata.
-            modelContainer.transform.position = Vector3.zero;
+            modelContainer.transform.position = new Vector3(0f, -1f, 0f);
+
 
             // 3. Inizializza lo slicer basandosi sulla geometria caricata
             InitializeSliceSystem(modelContainer);
             
-            // 4. (Opzionale) Teletrasporta l'utente davanti al modello se questo appare lontano/sotto terra
-            // MoveCameraToModel(skinRenderer.bounds.center); 
         }
         else
         {
@@ -66,15 +65,8 @@ public class AnatomyImporter : MonoBehaviour
         GameObject slicerPrefab = Resources.Load<GameObject>("Prefabs/InteractiveSlicer");
         if (slicerPrefab != null)
         {
-            // 1. Posizione Universale
-            // --- CONFIGURAZIONE POSIZIONE INIZIALE DEL PIANO ---
-            // Opzioni disponibili:
-            //   skinBounds.max.y  → Estremo superiore (testa)
-            //   skinBounds.min.y  → Estremo inferiore (piedi)
-            //   skinBounds.center.y → Centro
-            //   skinBounds.min.y + (skinBounds.size.y * percentuale) → Posizione personalizzata
-            
-            // ATTUALE: Posizionato al 37% dell'altezza (da min a max)
+            // 1. Posizionamento del piano di slicing:
+            // Posizionato al 37% dell'altezza (da min a max)
             float startYPosition = skinBounds.min.y + (skinBounds.size.y * 0.63f);
             
             Vector3 worldStartPosition = new Vector3(
@@ -84,7 +76,6 @@ public class AnatomyImporter : MonoBehaviour
             );
 
             // 2. Rotazione (per avere sezione Trasversale)
-            // Aggiunto 180° sull'asse Z per correggere il ribaltamento su 3D Slicer
             Quaternion slicerRotation = Quaternion.Euler(-90, 0, 0);
 
             // 3. Istanzia
@@ -143,7 +134,7 @@ void AutomateMaterialSetup(GameObject loadedModel)
 
             if (objName.Contains("skin") || objName.Contains("Skin"))
             {
-                baseColor = new Color(1f, 0.78f, 0.58f, 0.4f);
+                baseColor = new Color(1f, 0.78f, 0.58f, 0.3f); // Ridotta opacità per migliore visualizzazione
                 isTransparent = true;
                 skinRenderer = rend; 
             }
@@ -159,7 +150,7 @@ void AutomateMaterialSetup(GameObject loadedModel)
                 isTransparent = true;
                 startHidden = true;
             }
-            // --- MODIFICA QUI SOTTO ---
+
             else if (objName.Contains("Vessels")) // Riconosce i Vasi
             {
                 // Rosso scuro/Arterioso per i vasi
@@ -174,7 +165,7 @@ void AutomateMaterialSetup(GameObject loadedModel)
                 isTransparent = true; // Importante per il tuo slider opacità
                 startHidden = true;
             }
-            // --------------------------
+
             else if (objName.Contains("nodule"))
             {
                 baseColor = Color.green;
@@ -188,6 +179,13 @@ void AutomateMaterialSetup(GameObject loadedModel)
 
             newMat.color = baseColor;
             if (newMat.HasProperty("_BaseColor")) newMat.SetColor("_BaseColor", baseColor);
+            
+            // Imposta render queue più alto per organi interni (renderizzati dopo la pelle)
+            if (objName.Contains("Lung") || objName.Contains("Vessels") || objName.Contains("Airways"))
+            {
+                newMat.renderQueue = 3001; // Renderizzati dopo la pelle
+            }
+            
             rend.material = newMat;
             
             // Registriamo TUTTI i renderer. 

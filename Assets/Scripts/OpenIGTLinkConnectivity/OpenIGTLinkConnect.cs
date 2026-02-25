@@ -26,6 +26,9 @@ public class OpenIGTLinkConnect : MonoBehaviour
     public int port; // Port of the computer running Slicer
     public bool connectOnStart = true; // Connect automatically on Start
 
+    [Header("Slicer Calibration")]
+    [Tooltip("Offset spaziale inviato a Slicer per compensare il crop di TotalSegmentator.")]
+    public Vector3 slicerPositionOffset = Vector3.zero;
 
     ///////// GENERAL VARIABLES /////////
     int scaleMultiplier = 200; // Help variable to transform meters to millimeters and vice versa
@@ -177,12 +180,11 @@ public class OpenIGTLinkConnect : MonoBehaviour
     {
         while (true)
         {
-            // Debug.Log("Sending...");
             yield return null; // If you had written yield return new WaitForSeconds(1); it would have waited 1 second before executing the code below.
             // Loop foreach element in infoToSend
             foreach (ModelInfo element in infoToSend)
             {
-                SendMessageToServer.SendTransformMessage(element, scaleMultiplier, crcGenerator, CRC, socketForUnityAndMetaQuest);
+                SendMessageToServer.SendTransformMessage(element, scaleMultiplier, crcGenerator, CRC, socketForUnityAndMetaQuest, slicerPositionOffset);
             }
         }
     }
