@@ -11,7 +11,24 @@ public class AnatomyImporter : MonoBehaviour
 
     async void Start()
     {
+        InitializeCamera();
         await LoadGltfFromUrl(modelUrl);
+    }
+
+    void InitializeCamera()
+    {
+        Camera mainCamera = Camera.main;
+        
+        if (mainCamera != null)
+        {
+            // Imposta sfondo nero per VR/passthrough
+            mainCamera.clearFlags = CameraClearFlags.SolidColor;
+            mainCamera.backgroundColor = new Color(0, 0, 0, 0);
+        }
+        else
+        {
+            Debug.LogWarning("Nessuna MainCamera trovata. Verifica che il Camera Rig sia attivo.");
+        }
     }
 
     async Task LoadGltfFromUrl(string url)
@@ -128,7 +145,7 @@ void AutomateMaterialSetup(GameObject loadedModel)
 
             if (objName.Contains("skin") || objName.Contains("Skin"))
             {
-                baseColor = new Color(1f, 0.78f, 0.58f, 0.3f); // Ridotta opacità per migliore visualizzazione
+                baseColor = new Color(1f, 0.78f, 0.58f, 0.3f); // Pelle rosa chiaro con trasparenza
                 isTransparent = true;
                 skinRenderer = rend; 
             }
