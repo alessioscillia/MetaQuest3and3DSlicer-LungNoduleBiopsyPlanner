@@ -26,7 +26,6 @@ public class SliceInteractionController : MonoBehaviour
     private float _fixedX; // X fisso del cubo
     private float _fixedY; // Y fisso del cubo
     private bool _constraintsInitialized = false;
-    private float _lastZPosition = float.MinValue; // Per tracciare cambiamenti Z
     private int _currentSliceIndex = 0;
     private float _sliceStepSize = 0f;
 

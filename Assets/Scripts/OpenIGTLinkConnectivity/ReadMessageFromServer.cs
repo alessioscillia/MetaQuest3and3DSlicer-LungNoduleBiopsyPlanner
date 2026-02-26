@@ -15,9 +15,6 @@ using UnityEngine.UI;
 
 public class ReadMessageFromServer
 {
-    // Information to send the transform
-    static Matrix4x4 matrix = new Matrix4x4();
-    
     //////////////////////////////// READING INCOMING MESSAGE ////////////////////////////////
     /// Define structure of the incoming message's header ///
     public struct HeaderInfo
@@ -69,8 +66,6 @@ public class ReadMessageFromServer
         if (BitConverter.IsLittleEndian)
         {
             Array.Reverse(byteArray_Version);
-            //Array.Reverse(byteArray_MsgType);     // No need to reverse strings
-            //Array.Reverse(byteArray_DeviceName);  // No need to reverse strings
             Array.Reverse(byteArray_TimeStamp);
             Array.Reverse(byteArray_BodySize);
             Array.Reverse(byteArray_CRC);
@@ -242,32 +237,5 @@ public class ReadMessageFromServer
         incomingImageInfo.offsetBeforeImageContent = offsetBeforeImageContent;
         
         return incomingImageInfo;
-    }
-
-
-    //////////////////////////////// INCOMING TRANSFORM MESSAGE ////////////////////////////////
-    /// Extract transform information ///
-    public static Matrix4x4 ExtractTransformInfo(byte[] iMSGbyteArray, GameObject go, int scaleMultiplier, int headerSize)
-    {
-        byte[] matrixBytes = new byte[4];
-        float[] m = new float[16];
-        for (int i = 0; i < 16; i++)
-        { 
-            Buffer.BlockCopy(iMSGbyteArray, (int)headerSize + 12 + i * 4, matrixBytes, 0, 4); // We add +12 to skip the extended header
-            if (BitConverter.IsLittleEndian)
-            {
-                Array.Reverse(matrixBytes);
-            }
-
-            m[i] = BitConverter.ToSingle(matrixBytes, 0);
-            
-        }
-        
-        matrix.SetRow(0, new Vector4(m[0], m[3], m[6], m[9] / scaleMultiplier));
-        matrix.SetRow(1, new Vector4(m[1], m[4], m[7], m[10] / scaleMultiplier));
-        matrix.SetRow(2, new Vector4(m[2], m[5], m[8], m[11] / scaleMultiplier));
-        matrix.SetRow(3, new Vector4(0.0f, 0.0f, 0.0f, 1.0f));
-        
-        return matrix;
     }
 }
