@@ -1,5 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
+// using TMPro; // Rimuovi i commenti se stai usando TextMeshPro
 
 public class AnatomyManager : MonoBehaviour
 {
@@ -15,7 +16,13 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Renderer noduleRenderer;
 
     [Header("Slice System")]
-    [SerializeField] private GameObject sliceSystemInstance; // Riferimento al prefab InteractiveSlicer
+    [SerializeField] private GameObject sliceSystemInstance;
+
+    [Header("Toggle Texts")]
+    // Cambia "Text" in "TextMeshProUGUI" se usi TextMeshPro
+    [SerializeField] private Text lungsToggleText; 
+    [SerializeField] private Text bonesToggleText;
+    [SerializeField] private Text awVesselsToggleText;
 
     private void Awake()
     {
@@ -42,9 +49,6 @@ public class AnatomyManager : MonoBehaviour
         else if (lowerName.Contains("nodule")) noduleRenderer = rend;
     }
 
-    /// <summary>
-    /// Registra il sistema di slicing (chiamato da AnatomyImporter)
-    /// </summary>
     public void RegisterSliceSystem(GameObject sliceSystem)
     {
         sliceSystemInstance = sliceSystem;
@@ -68,15 +72,11 @@ public class AnatomyManager : MonoBehaviour
     public void UpdateBonesOpacity(float value) => SetOpacity(bonesRenderer, value);
     public void UpdateVesselsOpacity(float value) 
     {
-        // Applica l'opacità ai vasi sanguigni (rossi)
         SetOpacity(vesselsRenderer, value);
-        // Applica la STESSA opacità alle vie aeree (celesti)
         SetOpacity(airwaysRenderer, value);
     }
 
-
     // --- NUOVI TOGGLE (ON/OFF) ---
-    // Collega questi metodi all'evento "On Value Changed" dei tuoi Toggle UI
 
     public void ToggleSkin(bool isVisible)
     {
@@ -86,17 +86,23 @@ public class AnatomyManager : MonoBehaviour
     public void ToggleLungs(bool isVisible)
     {
         if (lungRenderer) lungRenderer.enabled = isVisible;
+        // Aggiorna il testo in base allo stato
+        if (lungsToggleText) lungsToggleText.text = isVisible ? "Lungs ON" : "Lungs OFF";
     }
 
     public void ToggleBones(bool isVisible)
     {
         if (bonesRenderer) bonesRenderer.enabled = isVisible;
+        // Aggiorna il testo in base allo stato
+        if (bonesToggleText) bonesToggleText.text = isVisible ? "Bones ON" : "Bones OFF";
     }
 
     public void ToggleVessels(bool isVisible)
     {
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible;
         if (airwaysRenderer) airwaysRenderer.enabled = isVisible;
+        // Aggiorna il testo in base allo stato
+        if (awVesselsToggleText) awVesselsToggleText.text = isVisible ? "AWVessels ON" : "AWVessels OFF";
     }
 
     public void ToggleNodule(bool isVisible)
@@ -105,10 +111,6 @@ public class AnatomyManager : MonoBehaviour
     }
 
     // --- TOGGLE SISTEMA DI SLICING ---
-    /// <summary>
-    /// Attiva/disattiva il sistema di slicing interattivo
-    /// Collega questo metodo al Toggle UI "Slice System"
-    /// </summary>
     public void ToggleSliceSystem(bool isActive)
     {
         if (sliceSystemInstance != null)

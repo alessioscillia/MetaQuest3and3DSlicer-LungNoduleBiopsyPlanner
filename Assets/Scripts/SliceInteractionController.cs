@@ -40,9 +40,11 @@ public class SliceInteractionController : MonoBehaviour
         {
             var constraints = translateTransformer.Constraints;
             
-            // Z libero (nessun limite di altezza)
-            constraints.MinZ.Constrain = false;
-            constraints.MaxZ.Constrain = false;
+            // Z vincolato ai limiti del volume
+            constraints.MinZ.Constrain = true;
+            constraints.MinZ.Value = _minZ;
+            constraints.MaxZ.Constrain = true;
+            constraints.MaxZ.Value = _maxZ;
 
             // Blocca X e Y alla posizione CORRENTE del cubo (non a 0)
             float currentX = transform.localPosition.x;
@@ -68,8 +70,6 @@ public class SliceInteractionController : MonoBehaviour
             float totalRange = _maxZ - _minZ;
             _sliceStepSize = totalRange / Mathf.Max(1, totalSlices - 1);
             
-            Debug.Log($"[SliceInteraction] Vincoli impostati - X fisso: {_fixedX:F3}, Y fisso: {_fixedY:F3}, Z illimitato");
-            Debug.Log($"[SliceInteraction] {totalSlices} slice, step size: {_sliceStepSize:F4} unità");
         }
     }
     
@@ -83,7 +83,6 @@ public class SliceInteractionController : MonoBehaviour
         {
             float totalRange = _maxZ - _minZ;
             _sliceStepSize = totalRange / Mathf.Max(1, totalSlices - 1);
-            Debug.Log($"[SliceInteraction] Aggiornato a {totalSlices} slice, step: {_sliceStepSize:F4}");
         }
     }
     
@@ -110,13 +109,12 @@ public class SliceInteractionController : MonoBehaviour
 
     void Update()
     {
-        // Forza X e Y a rimanere fissi se i vincoli sono stati inizializzati
         if (_constraintsInitialized)
         {
             Vector3 currentPos = transform.localPosition;
             bool needsCorrection = false;
             
-            // Se X o Y sono cambiati, resettali ai valori fissi
+            // 1. FORZA X e Y a rimanere fissi
             if (Mathf.Abs(currentPos.x - _fixedX) > 0.001f || Mathf.Abs(currentPos.y - _fixedY) > 0.001f)
             {
                 currentPos.x = _fixedX;
@@ -124,57 +122,40 @@ public class SliceInteractionController : MonoBehaviour
                 needsCorrection = true;
             }
             
-            // DISCRETIZZAZIONE: Snap alla slice più vicina
+            // 2. HARD CLAMP: Muro invalicabile per l'asse Z
+            // Se la mano trascina fuori l'oggetto, lo riportiamo immediatamente al limite
+            if (currentPos.z < _minZ || currentPos.z > _maxZ)
+            {
+                currentPos.z = Mathf.Clamp(currentPos.z, _minZ, _maxZ);
+                needsCorrection = true;
+            }
+            
+            // 3. DISCRETIZZAZIONE: Snap alla slice più vicina (usando la posizione già limitata)
             if (useDiscreteSlices && _sliceStepSize > 0f)
             {
-                // Calcola quale slice è più vicina
-                int nearestSliceIndex = GetCurrentSliceIndex();
+                // Calcoliamo l'indice in base alla posizione attuale filtrata
+                float normalizedPosition = Mathf.InverseLerp(_minZ, _maxZ, currentPos.z);
+                int nearestSliceIndex = Mathf.RoundToInt(normalizedPosition * (totalSlices - 1));
+                
                 float targetZ = _minZ + (nearestSliceIndex * _sliceStepSize);
                 
-                // Solo se cambiato rispetto alla slice corrente
+                // Aggiorniamo lo snap solo se l'indice della slice è effettivamente cambiato
                 if (nearestSliceIndex != _currentSliceIndex)
                 {
                     _currentSliceIndex = nearestSliceIndex;
                     currentPos.z = targetZ;
                     needsCorrection = true;
-                    
-                    Debug.Log($"[Slicer] Slice {_currentSliceIndex + 1}/{totalSlices} - Posizione Z: {targetZ:F4}");
-                }
-            }
-            else
-            {
-                // Movimento continuo: forza solo i limiti min/max
-                if (currentPos.z < _minZ)
-                {
-                    currentPos.z = _minZ;
-                    needsCorrection = true;
-                }
-                else if (currentPos.z > _maxZ)
-                {
-                    currentPos.z = _maxZ;
-                    needsCorrection = true;
                 }
             }
             
+            // 4. Applica tutte le correzioni necessarie al Transform
             if (needsCorrection)
             {
                 transform.localPosition = currentPos;
             }
         }
         
-        // Debug: mostra informazioni solo in modalità continua (discrete mode già logga sopra)
-        if (_constraintsInitialized && !useDiscreteSlices)
-        {
-            float currentZ = transform.localPosition.z;
-            if (Mathf.Abs(currentZ - _lastZPosition) > 0.01f)
-            {
-                float normalized = GetNormalizedPosition();
-                Debug.Log($"[Slicer] Z: {currentZ:F3} | Normalized: {normalized:F3} | Limiti: [{_minZ:F3}, {_maxZ:F3}]");
-                _lastZPosition = currentZ;
-            }
-        }
-        
-        // 1. Sincronizza il piano visivo con la posizione Z del cubo (handle)
+        // Sincronizza il piano visivo con la posizione Z finale del cubo
         if (visualClippingPlane != null)
         {
             Vector3 newPos = visualClippingPlane.localPosition;
@@ -182,13 +163,9 @@ public class SliceInteractionController : MonoBehaviour
             visualClippingPlane.localPosition = newPos;
         }
 
-        // 2. Aggiorna lo shader per effettuare il taglio effettivo
+        // Aggiorna lo shader per effettuare il taglio effettivo
         if (clippingMaterial != null)
         {
-            // Esempio: Passiamo la posizione Y mondiale o locale allo shader
-            // Nota: Dipende da come è scritto il tuo shader di clipping. 
-            // Spesso si passa un Piano (Normale + Distanza).
-
             Plane p = new Plane(transform.up, transform.position);
             Vector4 planeRepresentation = new Vector4(p.normal.x, p.normal.y, p.normal.z, p.distance);
             clippingMaterial.SetVector("_ClippingPlane", planeRepresentation);

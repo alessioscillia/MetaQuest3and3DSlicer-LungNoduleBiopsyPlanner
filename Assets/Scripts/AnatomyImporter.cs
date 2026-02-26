@@ -111,12 +111,20 @@ public class AnatomyImporter : MonoBehaviour
             SliceInteractionController controller = slicerInstance.GetComponentInChildren<SliceInteractionController>();
             if (controller != null)
             {
-                 // Conversione in locale per i vincoli dello slider
-                 Vector3 skinMinLocal = slicerInstance.transform.InverseTransformPoint(skinBounds.min);
-                 Vector3 skinMaxLocal = slicerInstance.transform.InverseTransformPoint(skinBounds.max);
+                // 1. Calcola i punti centrali esatti (Top e Bottom) basati solo sull'altezza Y
+                Vector3 worldTop = new Vector3(skinBounds.center.x, skinBounds.max.y, skinBounds.center.z);
+                Vector3 worldBottom = new Vector3(skinBounds.center.x, skinBounds.min.y, skinBounds.center.z);
 
-                 // Inizializza i vincoli: X e Y bloccati, Z libero
-                 controller.InitializeConstraints(skinMaxLocal.y, skinMinLocal.y);
+                // 2. Converti in spazio locale dello Slicer per ottenere la Z pulita
+                float zTop = slicerInstance.transform.InverseTransformPoint(worldTop).z;
+                float zBottom = slicerInstance.transform.InverseTransformPoint(worldBottom).z;
+
+                // 3. Usa Mathf.Min e Max per garantire che minZ sia SEMPRE minore di maxZ
+                float actualMinZ = Mathf.Min(zBottom, zTop);
+                float actualMaxZ = Mathf.Max(zBottom, zTop);
+
+                // Inizializza i vincoli in modo sicuro
+                controller.InitializeConstraints(actualMinZ, actualMaxZ);
 
                 // Connessione OpenIGTLink
                 OpenIGTLinkConnect igtLink = FindFirstObjectByType<OpenIGTLinkConnect>();
