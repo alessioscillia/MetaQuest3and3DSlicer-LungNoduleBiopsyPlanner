@@ -318,12 +318,23 @@ void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHead
             }
 
 
-            // PIANO FISSO (Senza Mirroring - Normale)
+            // PIANO FISSO (Con Mirroring X - come Moving Plane)
             if (fixPlaneMaterial != null)
             {
                 fixPlaneMaterial.mainTexture = mediaTexture;
-                fixPlaneMaterial.mainTextureScale = scaleUV;
-                fixPlaneMaterial.mainTextureOffset = offsetUV;
+                
+                // Applica lo stesso specchiamento verticale del moving plane
+                if (imageAspect > planeAspect)
+                {
+                    float scaleFactor = planeAspect / imageAspect;
+                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleFactor, -1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1);
+                }
+                else
+                {
+                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleUV.x, -1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1);
+                }
             }
         }
     }
