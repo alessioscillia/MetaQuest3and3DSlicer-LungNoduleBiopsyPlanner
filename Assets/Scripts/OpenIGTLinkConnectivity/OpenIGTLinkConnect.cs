@@ -72,7 +72,6 @@ public class OpenIGTLinkConnect : MonoBehaviour
             mediaMaterial.mainTextureScale = Vector2.one;
             mediaMaterial.mainTextureOffset = Vector2.zero;
             
-            Debug.Log($"[OpenIGTLinkConnect] Piano mobile impostato: {movingPlane.name}");
         }
     }
 
@@ -87,14 +86,7 @@ public class OpenIGTLinkConnect : MonoBehaviour
         // Solo se movingPlane è già stato assegnato nell'Inspector
         if (movingPlane != null)
         {
-            // Nessuna inversione della scala Y
-            mediaMaterial = movingPlane.GetComponent<MeshRenderer>().material;
-            mediaTexture = new Texture2D(512, 512, TextureFormat.Alpha8, false);
-            mediaMaterial.mainTexture = mediaTexture;
-            
-            // Forza le impostazioni texture per coprire tutto il piano
-            mediaMaterial.mainTextureScale = Vector2.one;
-            mediaMaterial.mainTextureOffset = Vector2.zero;
+            SetMovingPlane(movingPlane);
         }
 
         // Initialize texture parameters for image transfer of the fix plane
@@ -114,30 +106,6 @@ public class OpenIGTLinkConnect : MonoBehaviour
                 if (mediaTexture != null)
                 {
                     fixPlaneMaterial.mainTexture = mediaTexture;
-                }
-            }
-        }
-
-        // Posiziona il piano fisso nell'angolo in alto a destra
-        Vector3 screenPos = new Vector3(0.171000004f, 0.261999995f, 0.425000012f);
-
-        Transform modelsTransform = GameObject.Find("Models")?.transform;
-        if (modelsTransform != null)
-        {
-            Transform skinModelTransform = modelsTransform.Find("skin_model");
-
-            if (skinModelTransform != null)
-            {
-                GameObject fixedModel = skinModelTransform.gameObject;
-                Renderer modelRenderer = fixedModel.GetComponentInChildren<Renderer>();
-
-                if (modelRenderer != null && fixedImagePlane != null)
-                {
-                    Vector3 modelCenter = modelRenderer.bounds.center;
-                    float verticalOffset = 0.3f;
-                    Vector3 newPos = modelCenter + new Vector3(0f, verticalOffset, 0f);
-
-                    fixedImagePlane.transform.position = newPos;
                 }
             }
         }
@@ -194,17 +162,11 @@ public class OpenIGTLinkConnect : MonoBehaviour
     {
         while (true)
         {
-            // Debug.Log("Listening..."); // Commented out to reduce spam
             yield return null;
 
             ////////// READ THE HEADER OF THE INCOMING MESSAGES //////////
             byte[] iMSGbyteArray = socketForUnityAndMetaQuest.Listen(headerSize);
 
-            // Log only if we receive something substantial
-            if (iMSGbyteArray.Length > 0)
-            {
-                // Debug.Log($"Received bytes: {iMSGbyteArray.Length}");
-            }
 
             if (iMSGbyteArray.Length >= (int)headerSize)
             {
@@ -227,20 +189,12 @@ public class OpenIGTLinkConnect : MonoBehaviour
                 if (iMSGbyteArray.Length >= (int)bodySize + (int)headerSize)
                 {
                     // Compare different message types and act accordingly
-                    if ((iHeaderInfo.msgType).Contains("TRANSFORM"))
-                    {
-                        // Extract the transform matrix from the message
-                        Matrix4x4 matrix = ReadMessageFromServer.ExtractTransformInfo(iMSGbyteArray, movingPlane, scaleMultiplier, (int)iHeaderInfo.headerSize);
-                        // Apply the transform matrix to the object
-                        ApplyTransformToGameObject(matrix, movingPlane);
-                    }
-
-                    else if ((iHeaderInfo.msgType).Contains("IMAGE"))
+                    if (iHeaderInfo.msgType.Contains("IMAGE"))
                     {
                         // Read and apply the image content to our preview plane
                         ApplyImageInfo(iMSGbyteArray, iHeaderInfo);
                     }
-                    else if ((iHeaderInfo.msgType).Contains("STATUS"))
+                    else if (iHeaderInfo.msgType.Contains("STATUS"))
                     {
                         // STATUS message (keepalive)
                     }
@@ -249,35 +203,10 @@ public class OpenIGTLinkConnect : MonoBehaviour
                         Debug.LogWarning($"Unknown or unhandled message type: {iHeaderInfo.msgType}");
                     }
                 }
-                else
-                {
-                    // Debug.LogWarning($"Incomplete message. Have {iMSGbyteArray.Length}, need {bodySize + headerSize}");
-                }
             }
         }
     }
 
-    /// Apply transform information to GameObject ///
-    void ApplyTransformToGameObject(Matrix4x4 matrix, GameObject gameObject)
-    {
-        Vector3 translation = matrix.GetColumn(3);
-        //gameObject.transform.localPosition = new Vector3(-translation.x, translation.y, translation.z);
-        //Vector3 rotation= matrix.rotation.eulerAngles;
-        //gameObject.transform.localRotation = Quaternion.Euler(rotation.x, -rotation.y, -rotation.z);
-        if (translation.x > 10000 || translation.y > 10000 || translation.z > 10000)
-        {
-            gameObject.transform.position = new Vector3(0, 0, 0.5f);
-            Debug.Log("Out of limits. Default position assigned.");
-        }
-        else
-        {
-            gameObject.transform.localPosition = new Vector3(-translation.x, translation.y, translation.z);
-            Vector3 rotation = matrix.rotation.eulerAngles;
-            gameObject.transform.localRotation = Quaternion.Euler(rotation.x, -rotation.y, -rotation.z);
-        }
-    }
-
-    //////////////////////////////// INCOMING IMAGE MESSAGE ////////////////////////////////
 //////////////////////////////// INCOMING IMAGE MESSAGE ////////////////////////////////
 void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHeaderInfo)
     {
