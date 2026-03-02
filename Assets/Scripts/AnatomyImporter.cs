@@ -52,13 +52,13 @@ public class AnatomyImporter : MonoBehaviour
             modelContainer.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
             
             // Rotazione: Corregge l'orientamento (da supino a in piedi)
-            modelContainer.transform.localRotation = Quaternion.Euler(-90, 0, 0);
+            modelContainer.transform.localRotation = Quaternion.Euler(-90f, 0, 0);
 
             // --- PUNTO CRUCIALE PER L'UNIVERSALITÀ ---
             // NON spostare il modello. Lascialo a (0,0,0).
             // In questo modo, l'origine del file GLTF coincide perfettamente con l'origine del Mondo Unity.
             // Qualsiasi coordinata contenuta nel file (che sia -10, -340 o +1000) sarà rispettata.
-            modelContainer.transform.position = new Vector3(0f, -1f, 0f);
+            modelContainer.transform.position = new Vector3(0f, 0f, 0f);
 
 
             // 3. Inizializza lo slicer basandosi sulla geometria caricata
@@ -71,69 +71,76 @@ public class AnatomyImporter : MonoBehaviour
         }
     }
 
-    void InitializeSliceSystem(GameObject modelContainer)
+void InitializeSliceSystem(GameObject modelContainer)
     {
         if (skinRenderer == null) return;
 
-        // Recuperiamo i bounds in World Space.
-        // Poiché il container è a (0,0,0), questi bounds rappresentano le coordinate REALI della TAC.
         Bounds skinBounds = skinRenderer.bounds;
-
         GameObject slicerPrefab = Resources.Load<GameObject>("Prefabs/InteractiveSlicer");
+        
         if (slicerPrefab != null)
         {
-            // 1. Posizionamento del piano di slicing:
-            // Posizionato al 37% dell'altezza (da min a max)
-            float startYPosition = skinBounds.min.y + (skinBounds.size.y * 0.63f);
-            
-            Vector3 worldStartPosition = new Vector3(
-                skinBounds.center.x, 
-                startYPosition, 
-                skinBounds.center.z 
-            );
-
-            // 2. Rotazione (per avere sezione Trasversale)
-            Quaternion slicerRotation = Quaternion.Euler(-90, 0, 0);
-
-            // 3. Istanzia
-            GameObject slicerInstance = Instantiate(slicerPrefab, worldStartPosition, slicerRotation);
-            
-            // IMPORTANTE: Disattiva inizialmente il sistema di slicing
+            // 1. ISTANZIA AL CENTRO DEL MODELLO (senza rotazioni forzate)
+            GameObject slicerInstance = Instantiate(slicerPrefab, modelContainer.transform.position, Quaternion.identity);
             slicerInstance.SetActive(false);
             
-            // 4. Imparenta per ordine (mantiene la posizione world corretta)
+            // 2. IMPARENTA AL MODELLO
             slicerInstance.transform.SetParent(modelContainer.transform, true);
 
-            // 5. Registra il sistema di slicing in AnatomyManager
+            // 3. ALLINEAMENTO LOCALE PERFETTO
+            slicerInstance.transform.localRotation = Quaternion.identity;
+
+            // 4. Registra il sistema di slicing in AnatomyManager
             AnatomyManager.Instance.RegisterSliceSystem(slicerInstance);
 
             // --- Configurazione Controller ---
             SliceInteractionController controller = slicerInstance.GetComponentInChildren<SliceInteractionController>();
             if (controller != null)
             {
-                // 1. Calcola i punti centrali esatti (Top e Bottom) basati solo sull'altezza Y
-                Vector3 worldTop = new Vector3(skinBounds.center.x, skinBounds.max.y, skinBounds.center.z);
-                Vector3 worldBottom = new Vector3(skinBounds.center.x, skinBounds.min.y, skinBounds.center.z);
+                // --- IL TRUCCO DEGLI 8 ANGOLI ---
+                // Calcoliamo gli 8 vertici del Bounding Box globale
+                Vector3 min = skinBounds.min;
+                Vector3 max = skinBounds.max;
+                Vector3[] boundsCorners = new Vector3[8]
+                {
+                    new Vector3(min.x, min.y, min.z),
+                    new Vector3(max.x, min.y, min.z),
+                    new Vector3(min.x, max.y, min.z),
+                    new Vector3(max.x, max.y, min.z),
+                    new Vector3(min.x, min.y, max.z),
+                    new Vector3(max.x, min.y, max.z),
+                    new Vector3(min.x, max.y, max.z),
+                    new Vector3(max.x, max.y, max.z)
+                };
 
-                // 2. Converti in spazio locale dello Slicer per ottenere la Z pulita
-                float zTop = slicerInstance.transform.InverseTransformPoint(worldTop).z;
-                float zBottom = slicerInstance.transform.InverseTransformPoint(worldBottom).z;
+                // Troviamo il limite massimo e minimo lungo l'asse Z LOCALE del piano
+                float actualMinZ = float.MaxValue;
+                float actualMaxZ = float.MinValue;
 
-                // 3. Usa Mathf.Min e Max per garantire che minZ sia SEMPRE minore di maxZ
-                float actualMinZ = Mathf.Min(zBottom, zTop);
-                float actualMaxZ = Mathf.Max(zBottom, zTop);
+                foreach (Vector3 corner in boundsCorners)
+                {
+                    // Convertiamo ogni angolo nello spazio locale del piano
+                    float localZ = slicerInstance.transform.InverseTransformPoint(corner).z;
+                    if (localZ < actualMinZ) actualMinZ = localZ;
+                    if (localZ > actualMaxZ) actualMaxZ = localZ;
+                }
 
-                // Inizializza i vincoli in modo sicuro
+                // Inizializza i vincoli in modo che non si blocchi MAI
                 controller.InitializeConstraints(actualMinZ, actualMaxZ);
+
+                // --- RIPRISTINIAMO X e Y ORIGINALI ---
+                // Calcoliamo il centro anatomico nello spazio locale del contenitore
+                Vector3 localCenter = modelContainer.transform.InverseTransformPoint(skinBounds.center);
+                
+                // Posizioniamo il piano al 63% della Z, ma mantenendo il centro X e Y dell'anatomia!
+                float startZ = actualMinZ + ((actualMaxZ - actualMinZ) * 0.63f);
+                slicerInstance.transform.localPosition = new Vector3(localCenter.x, localCenter.y, startZ);
 
                 // Connessione OpenIGTLink
                 OpenIGTLinkConnect igtLink = FindFirstObjectByType<OpenIGTLinkConnect>();
                 if (igtLink != null && controller.visualClippingPlane != null)
                 {
-                    // Registra il piano per inviare la posizione a Slicer
                     igtLink.RegisterDynamicModel(controller.visualClippingPlane.gameObject, "UnityReslicePlane");
-                    
-                    // Imposta questo piano come destinazione per ricevere le immagini delle slice
                     igtLink.SetMovingPlane(controller.visualClippingPlane.gameObject);
                 }
             }
