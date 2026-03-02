@@ -3197,7 +3197,7 @@ MonoBehaviour:
   ipString: 127.0.0.1
   port: 18944
   connectOnStart: 1
-  slicerPositionOffset: {x: 0, y: 0, z: 0.699435}
+  slicerPositionOffset: {x: 0, y: 0, z: -0.3259565}
   infoToSend: []
   movingPlane: {fileID: 0}
   fixPlane: {fileID: 1504854795}

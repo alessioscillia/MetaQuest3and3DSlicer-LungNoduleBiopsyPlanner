@@ -80,24 +80,26 @@ void InitializeSliceSystem(GameObject modelContainer)
         
         if (slicerPrefab != null)
         {
-            // 1. ISTANZIA AL CENTRO DEL MODELLO (senza rotazioni forzate)
-            GameObject slicerInstance = Instantiate(slicerPrefab, modelContainer.transform.position, Quaternion.identity);
+            // 1. IL FIX: Trova il centro geometrico reale nello spazio globale (World Space)
+            Vector3 worldCenter = skinBounds.center;
+
+            // 2. Istanzia il piano ESATTAMENTE al centro
+            GameObject slicerInstance = Instantiate(slicerPrefab, worldCenter, Quaternion.identity);
             slicerInstance.SetActive(false);
             
-            // 2. IMPARENTA AL MODELLO
+            // 3. Imparenta al modello (true = mantieni la posizione globale al centro)
             slicerInstance.transform.SetParent(modelContainer.transform, true);
 
-            // 3. ALLINEAMENTO LOCALE PERFETTO
+            // 4. Allinea la rotazione localmente al modello
             slicerInstance.transform.localRotation = Quaternion.identity;
 
-            // 4. Registra il sistema di slicing in AnatomyManager
+            // Registra il sistema
             AnatomyManager.Instance.RegisterSliceSystem(slicerInstance);
 
             // --- Configurazione Controller ---
             SliceInteractionController controller = slicerInstance.GetComponentInChildren<SliceInteractionController>();
             if (controller != null)
             {
-                // --- IL TRUCCO DEGLI 8 ANGOLI ---
                 // Calcoliamo gli 8 vertici del Bounding Box globale
                 Vector3 min = skinBounds.min;
                 Vector3 max = skinBounds.max;
@@ -113,28 +115,23 @@ void InitializeSliceSystem(GameObject modelContainer)
                     new Vector3(max.x, max.y, max.z)
                 };
 
-                // Troviamo il limite massimo e minimo lungo l'asse Z LOCALE del piano
                 float actualMinZ = float.MaxValue;
                 float actualMaxZ = float.MinValue;
 
+                // Ora che il piano è GIA' al centro, i limiti calcolati 
+                // saranno perfettamente bilanciati (es. da -10 a +10)
                 foreach (Vector3 corner in boundsCorners)
                 {
-                    // Convertiamo ogni angolo nello spazio locale del piano
                     float localZ = slicerInstance.transform.InverseTransformPoint(corner).z;
                     if (localZ < actualMinZ) actualMinZ = localZ;
                     if (localZ > actualMaxZ) actualMaxZ = localZ;
                 }
 
-                // Inizializza i vincoli in modo che non si blocchi MAI
+                // Inizializza i vincoli
                 controller.InitializeConstraints(actualMinZ, actualMaxZ);
 
-                // --- RIPRISTINIAMO X e Y ORIGINALI ---
-                // Calcoliamo il centro anatomico nello spazio locale del contenitore
-                Vector3 localCenter = modelContainer.transform.InverseTransformPoint(skinBounds.center);
-                
-                // Posizioniamo il piano al 63% della Z, ma mantenendo il centro X e Y dell'anatomia!
-                float startZ = actualMinZ + ((actualMaxZ - actualMinZ) * 0.63f);
-                slicerInstance.transform.localPosition = new Vector3(localCenter.x, localCenter.y, startZ);
+                // RIMOSSO: Il blocco in cui cercavi di calcolare 'startZ' e spostare 
+                // la localPosition. Non serve più perché il piano nasce già centrato!
 
                 // Connessione OpenIGTLink
                 OpenIGTLinkConnect igtLink = FindFirstObjectByType<OpenIGTLinkConnect>();
