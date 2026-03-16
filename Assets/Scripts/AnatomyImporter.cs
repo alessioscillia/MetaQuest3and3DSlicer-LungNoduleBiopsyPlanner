@@ -60,6 +60,15 @@ public class AnatomyImporter : MonoBehaviour
             // Qualsiasi coordinata contenuta nel file (che sia -10, -340 o +1000) sarà rispettata.
             modelContainer.transform.position = new Vector3(0f, 0f, 0f);
 
+            if (AnatomyManager.Instance != null)
+            {
+                AnatomyManager.Instance.RegisterImportedModel(modelContainer);
+            }
+            else
+            {
+                Debug.LogWarning("[AnatomyImporter] AnatomyManager non trovato: Modify/Fix Model non disponibili.");
+            }
+
 
             // 3. Inizializza lo slicer basandosi sulla geometria caricata
             InitializeSliceSystem(modelContainer);
@@ -167,7 +176,7 @@ void AutomateMaterialSetup(GameObject loadedModel)
 
             if (objName.Contains("skin") || objName.Contains("Skin"))
             {
-                baseColor = new Color(1f, 0.78f, 0.58f, 0.3f); // Pelle rosa chiaro con trasparenza
+                baseColor = new Color(1f, 0.78f, 0.58f, 0.2f); // Pelle rosa chiaro con trasparenza
                 isTransparent = true;
                 skinRenderer = rend; 
             }
