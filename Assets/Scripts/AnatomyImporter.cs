@@ -63,7 +63,17 @@ public class AnatomyImporter : MonoBehaviour
 
             // 3. Inizializza lo slicer basandosi sulla geometria caricata
             InitializeSliceSystem(modelContainer);
-            
+
+//            if (SurgicalAlignment.Instance != null)
+//            {
+//                SurgicalAlignment.Instance.SetHologram(modelContainer);
+//            }
+//            else
+//            {
+//                Debug.LogWarning("Modello caricato, ma SurgicalAlignment non trovato nella scena.");
+
+
+  //          }
         }
         else
         {
@@ -195,6 +205,15 @@ void AutomateMaterialSetup(GameObject loadedModel)
                 newMat.EnableKeyword("_EMISSION");
                 newMat.SetColor("_EmissionColor", Color.green * 2);
                 isTransparent = false;
+            }
+            else if (objName.Contains("Tool") || objName.Contains("tool"))
+            {
+                baseColor = new Color(0.0f, 0.5f, 0.5f, 1.0f); // Verde scuro/teal per strumenti chirurgici
+                isTransparent = false; // Lo strumento chirurgico è solido
+                
+                // Opzionale: Rendiamolo un po' più "metallico" in Unity
+                newMat.SetFloat("_Metallic", 0.5f);
+                newMat.SetFloat("_Smoothness", 0.5f);
             }
 
             if (isTransparent) SetupTransparentMaterial(newMat);

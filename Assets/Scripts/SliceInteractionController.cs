@@ -151,7 +151,7 @@ public class SliceInteractionController : MonoBehaviour
             if (needsCorrection)
             {
                 transform.localPosition = currentPos;
-            }
+            }            
         }
         
         // Sincronizza il piano visivo con la posizione Z finale del cubo

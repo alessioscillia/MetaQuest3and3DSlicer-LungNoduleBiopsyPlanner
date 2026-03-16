@@ -14,20 +14,26 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Renderer vesselsRenderer;
     [SerializeField] private Renderer airwaysRenderer;
     [SerializeField] private Renderer noduleRenderer;
+    [SerializeField] private Renderer toolRenderer;
 
     [Header("Slice System")]
     [SerializeField] private GameObject sliceSystemInstance;
 
     [Header("Toggle Texts")]
     // Cambia "Text" in "TextMeshProUGUI" se usi TextMeshPro
+    [SerializeField] private Text skinToggleText;
     [SerializeField] private Text lungsToggleText; 
     [SerializeField] private Text bonesToggleText;
     [SerializeField] private Text awVesselsToggleText;
+    [SerializeField] private Text needlePathToggleText;
 
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+
+        // Il Tool deve essere inizialmente spento.
+        ToggleTool(false);
     }
 
     // --- REGISTRAZIONE AUTOMATICA ---
@@ -47,6 +53,11 @@ public class AnatomyManager : MonoBehaviour
             airwaysRenderer = rend;
         }
         else if (lowerName.Contains("nodule")) noduleRenderer = rend;
+        else if (lowerName.Contains("tool"))
+        {
+            toolRenderer = rend;
+            toolRenderer.enabled = false;
+        }
     }
 
     public void RegisterSliceSystem(GameObject sliceSystem)
@@ -81,6 +92,8 @@ public class AnatomyManager : MonoBehaviour
     public void ToggleSkin(bool isVisible)
     {
         if (skinRenderer) skinRenderer.enabled = isVisible;
+        if (skinToggleText) skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF";
+
     }
 
     public void ToggleLungs(bool isVisible)
@@ -108,6 +121,12 @@ public class AnatomyManager : MonoBehaviour
     public void ToggleNodule(bool isVisible)
     {
         if (noduleRenderer) noduleRenderer.enabled = isVisible;
+    }
+
+    public void ToggleTool(bool isVisible)
+    {
+        if (toolRenderer) toolRenderer.enabled = isVisible;
+        if (needlePathToggleText) needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
     }
 
     // --- TOGGLE SISTEMA DI SLICING ---
