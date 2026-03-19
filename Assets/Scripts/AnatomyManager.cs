@@ -165,7 +165,8 @@ public class AnatomyManager : MonoBehaviour
     {
         if (rend != null && rend.material != null)
         {
-            ConfigureMaterialSurfaceForAlpha(rend.material, alphaVal);
+            // PASSIAMO IL RENDERER INTERO AL POSTO DEL SOLO MATERIALE
+            ConfigureMaterialSurfaceForAlpha(rend, alphaVal); 
 
             Color color = rend.material.color;
             color.a = alphaVal;
@@ -175,38 +176,37 @@ public class AnatomyManager : MonoBehaviour
         }
     }
 
-    private void ConfigureMaterialSurfaceForAlpha(Material mat, float alphaVal)
+    private void ConfigureMaterialSurfaceForAlpha(Renderer rend, float alphaVal)
     {
-        if (mat == null)
-        {
-            return;
-        }
+        Material mat = rend.material;
+        if (mat == null) return;
 
-        bool shouldBeTransparent = alphaVal < 0.999f;
+        string lowerName = rend.gameObject.name.ToLower();
 
-        if (shouldBeTransparent)
+        // Manteniamo SEMPRE lo shader in modalità Transparent per evitare i bug di URP.
+        // Quando lo slider è al massimo (alpha = 1), sarà visivamente solido al 100%,
+        // ma manterrà l'ordine di rendering corretto (3000 e 3001) senza "rompere" il materiale.
+
+        if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1.0f);
+        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0.0f);
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+        mat.SetInt("_ZWrite", 0);
+        
+        mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+        
+        // --- IL FIX PER L'ORDINE VISIVO ---
+        if (lowerName.Contains("skin") || lowerName.Contains("body"))
         {
-            // URP Lit/Unlit style properties
-            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1.0f);
-            if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0.0f);
-            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-            mat.SetInt("_ZWrite", 0);
-            mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
-            mat.SetShaderPassEnabled("ShadowCaster", false);
+            mat.renderQueue = 3000; // La pelle viene disegnata per prima
         }
         else
         {
-            if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 0.0f);
-            mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
-            mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
-            mat.SetInt("_ZWrite", 1);
-            mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
-            mat.SetShaderPassEnabled("ShadowCaster", true);
+            mat.renderQueue = 3001; // Gli organi interni vengono disegnati SOPRA la pelle
         }
+        
+        mat.SetShaderPassEnabled("ShadowCaster", false);
     }
     public void UpdateSkinOpacity(float value)
     {

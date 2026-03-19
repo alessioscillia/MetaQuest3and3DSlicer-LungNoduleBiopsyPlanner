@@ -280,7 +280,8 @@ void AutomateMaterialSetup(GameObject loadedModel)
         // ------------------------------
 
         // Mantieni gli organi interni renderizzati dopo la pelle trasparente
-        if (lower.Contains("lung") || lower.Contains("vessels") || lower.Contains("airways"))
+        if (lower.Contains("lung") || lower.Contains("vessels") || lower.Contains("airways") || 
+            lower.Contains("bone") || lower.Contains("rib") || lower.Contains("vertebra"))
         {
             mat.renderQueue = 3001;
         }
