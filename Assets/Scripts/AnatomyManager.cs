@@ -58,7 +58,17 @@ public class AnatomyManager : MonoBehaviour
         if (lowerName.Contains("skin")) 
         {
             skinRenderer = rend;
+            
+            // Aggiungiamo il Collider alla pelle per calcolare il punto di ingresso
+            if (skinRenderer.gameObject.GetComponent<Collider>() == null)
+            {
+                MeshCollider mc = skinRenderer.gameObject.AddComponent<MeshCollider>();
+                mc.convex = false; 
+            }
+            // Assegniamo un layer specifico alla pelle
+            skinRenderer.gameObject.layer = LayerMask.NameToLayer("SkinLayer"); 
         }
+
         else if (lowerName.Contains("lung")) 
         {
             lungRenderer = rend;
