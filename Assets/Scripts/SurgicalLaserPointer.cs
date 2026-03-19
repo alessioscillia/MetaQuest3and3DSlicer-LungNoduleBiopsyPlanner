@@ -16,8 +16,9 @@ public class SurgicalLaserPointer : MonoBehaviour
     [Tooltip("A che distanza dalla mano far comparire il mirino (es. 0.3 = 30 cm)")]
     public float reticleDistance = 0.3f;
 
-    [Header("Filtro Layer")]
-    public LayerMask targetLayer;
+    [Header("Filtro Hit (Ostacoli + Bersaglio)")]
+    [Tooltip("Inserisci qui TUTTI i layer che il laser deve rilevare (Noduli, Ossa, Vasi, ecc.)")]
+    public LayerMask hittableLayers;
 
     private LineRenderer lineRenderer;
     private Grabbable oculusGrabbable;
@@ -37,8 +38,6 @@ public class SurgicalLaserPointer : MonoBehaviour
         lineRenderer.material.color = normalColor;
         
         // --- EFFETTO RAGGI X PER IL LASER ---
-        // renderQueue 4000 = Overlay (sopra a tutto)
-        // _ZTest 8 = Always (ignora gli oggetti davanti)
         lineRenderer.material.renderQueue = 4000;
         lineRenderer.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
 
@@ -56,7 +55,7 @@ public class SurgicalLaserPointer : MonoBehaviour
                 Material reticleMat = reticleRenderer.material;
                 reticleMat.renderQueue = 4000;
                 reticleMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
-                reticleMat.SetInt("_ZWrite", 0); // Non bloccare altri oggetti dietro di esso
+                reticleMat.SetInt("_ZWrite", 0); 
             }
         }
     }
@@ -70,11 +69,21 @@ public class SurgicalLaserPointer : MonoBehaviour
         float currentHitDistance = maxDistance;
         bool hitNodule = false;
 
-        if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, targetLayer))
+        // Il Raycast ora colpisce TUTTO ciò che è incluso nella maschera 'hittableLayers'
+        if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, hittableLayers))
         {
             currentHitDistance = hit.distance;
             lineRenderer.SetPosition(1, hit.point);
-            hitNodule = true;
+
+            // Controlliamo il nome dell'oggetto colpito per capire se è il nodulo
+            string hitName = hit.collider.gameObject.name.ToLowerInvariant();
+            
+            // Se colpisce il nodulo per primo, diventa verde. 
+            // Se colpisce un osso o un vaso, si ferma lì e rimane rosso.
+            if (hitName.Contains("nodule"))
+            {
+                hitNodule = true;
+            }
         }
         else
         {
@@ -111,28 +120,22 @@ public class SurgicalLaserPointer : MonoBehaviour
 
     public void HideSphere()
     {
-        // 1. Nascondi la grafica della sfera (diventa invisibile)
         MeshRenderer mesh = GetComponent<MeshRenderer>();
         if (mesh != null) mesh.enabled = false;
 
-        // 2. Disabilita la possibilità di afferrarla
         if (oculusGrabbable != null) oculusGrabbable.enabled = false;
 
-        // 3. (Opzionale ma consigliato) Disabilita il collider per non sbatterci contro per sbaglio
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = false;
     }
 
     public void ShowSphere()
     {
-        // 1. Fai ricomparire la grafica della sfera
         MeshRenderer mesh = GetComponent<MeshRenderer>();
         if (mesh != null) mesh.enabled = true;
 
-        // 2. Riabilita la presa
         if (oculusGrabbable != null) oculusGrabbable.enabled = true;
 
-        // 3. Riabilita il collider
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = true;
     }

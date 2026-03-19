@@ -54,14 +54,59 @@ public class AnatomyManager : MonoBehaviour
     public void RegisterOrganRenderer(string objName, Renderer rend)
     {
         string lowerName = objName.ToLower();
-        if (lowerName.Contains("skin")) skinRenderer = rend;
-        else if (lowerName.Contains("lung")) lungRenderer = rend;
-        else if (lowerName.Contains("bone") || lowerName.Contains("rib") || lowerName.Contains("vertebra")) bonesRenderer = rend;
-        else if (lowerName.Contains("vessel")) vesselsRenderer = rend;
-        else if (lowerName.Contains("airways") || lowerName.Contains("trachea")) airwaysRenderer = rend;
+        
+        if (lowerName.Contains("skin")) 
+        {
+            skinRenderer = rend;
+        }
+        else if (lowerName.Contains("lung")) 
+        {
+            lungRenderer = rend;
+        }
+        else if (lowerName.Contains("bone") || lowerName.Contains("rib") || lowerName.Contains("vertebra")) 
+        {
+            bonesRenderer = rend;
+            
+            // Aggiungiamo il Collider alle ossa per bloccare il laser
+            if (bonesRenderer.gameObject.GetComponent<Collider>() == null)
+            {
+                MeshCollider mc = bonesRenderer.gameObject.AddComponent<MeshCollider>();
+                mc.convex = false; // False va bene per mesh complesse se usate solo per Raycast
+            }
+            // Assegniamo le ossa a un layer specifico (es. "Obstacle" o lo stesso dei vasi)
+            bonesRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle"); 
+        }
+        else if (lowerName.Contains("vessel")) 
+        {
+            vesselsRenderer = rend;
+            
+            // Aggiungiamo il Collider ai vasi per bloccare il laser
+            if (vesselsRenderer.gameObject.GetComponent<Collider>() == null)
+            {
+                MeshCollider mc = vesselsRenderer.gameObject.AddComponent<MeshCollider>();
+                mc.convex = false;
+            }
+            // Assegniamo i vasi a un layer specifico (es. "Obstacle")
+            vesselsRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
+        }
+        else if (lowerName.Contains("airways") || lowerName.Contains("trachea")) 
+        {
+            airwaysRenderer = rend;
+            
+            // Opzionale: se vuoi che anche le vie aeree blocchino il laser, scommenta qui sotto
+            /*
+            if (airwaysRenderer.gameObject.GetComponent<Collider>() == null)
+            {
+                MeshCollider mc = airwaysRenderer.gameObject.AddComponent<MeshCollider>();
+                mc.convex = false;
+            }
+            airwaysRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
+            */
+        }
         else if (lowerName.Contains("nodule"))
         {
             noduleRenderer = rend;
+            
             // 1. Assicuriamoci che il nodulo abbia un Collider per essere colpito dal laser
             if (noduleRenderer.gameObject.GetComponent<Collider>() == null)
             {
@@ -69,14 +114,13 @@ public class AnatomyManager : MonoBehaviour
                 mc.convex = false;
             }
             // 2. Assegniamo il layer "Nodule" all'oggetto
-            // In Unity, puoi usare LayerMask.NameToLayer("NomeDelLayer") per trovare l'indice numerico
             noduleRenderer.gameObject.layer = LayerMask.NameToLayer("Nodule");
         }
         else if (lowerName.Contains("tool"))
         {
             toolRenderer = rend;
+            
             // Per permettere a ISDK di afferrare l'oggetto, questo DEVE avere un Collider.
-            // Se il modello GLTF non lo ha di default, lo aggiungiamo dinamicamente qui.
             if (toolRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = toolRenderer.gameObject.AddComponent<MeshCollider>();
