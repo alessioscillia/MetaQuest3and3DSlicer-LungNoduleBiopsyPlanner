@@ -72,6 +72,15 @@ public class AnatomyManager : MonoBehaviour
         else if (lowerName.Contains("lung")) 
         {
             lungRenderer = rend;
+            
+            // Aggiungiamo il Collider ai polmoni per calcolare il punto di ingresso (Pleura)
+            if (lungRenderer.gameObject.GetComponent<Collider>() == null)
+            {
+                MeshCollider mc = lungRenderer.gameObject.AddComponent<MeshCollider>();
+                mc.convex = false; 
+            }
+            // Assegniamo un layer specifico ai polmoni
+            lungRenderer.gameObject.layer = LayerMask.NameToLayer("PleuraLayer"); 
         }
         else if (lowerName.Contains("bone") || lowerName.Contains("rib") || lowerName.Contains("vertebra")) 
         {

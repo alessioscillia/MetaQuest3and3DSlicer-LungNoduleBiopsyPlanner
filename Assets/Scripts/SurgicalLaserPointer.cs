@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI; // Necessario per la UI standard
 using Oculus.Interaction;
 using TMPro;
 
@@ -17,14 +16,17 @@ public class SurgicalLaserPointer : MonoBehaviour
     public float reticleScale = 0.5f;
     public float reticleDistance = 0.8f;
 
-    [Header("Filtro Hit (Ostacoli + Bersaglio)")]
+    [Header("Filtri Hit (Livelli Laser)")]
+    [Tooltip("Ostacoli e Noduli (es. Obstacle, Nodule)")]
     public LayerMask hittableLayers;
-
-    [Header("Calcolo Distanza (Pelle-Nodulo)")]
+    
+    [Header("Calcolo Distanze")]
     [Tooltip("Inserisci qui SOLO il layer della pelle")]
     public LayerMask skinLayer;
+    [Tooltip("Inserisci qui SOLO il layer dei polmoni/pleura")]
+    public LayerMask pleuraLayer;
     [Tooltip("Il testo nel Canvas dove verrà mostrata la distanza")]
-    public TextMeshProUGUI distanceTextUI;
+    public TextMeshProUGUI distanceTextUI; 
 
     private LineRenderer lineRenderer;
     private Grabbable oculusGrabbable;
@@ -60,8 +62,7 @@ public class SurgicalLaserPointer : MonoBehaviour
             }
         }
         
-        // Imposta il testo di default all'avvio
-        if (distanceTextUI != null) distanceTextUI.text = "Skin: N/A";
+        if (distanceTextUI != null) distanceTextUI.text = "Skin: N/A\nLungs: N/A";
     }
 
     void Update()
@@ -73,7 +74,7 @@ public class SurgicalLaserPointer : MonoBehaviour
         float currentHitDistance = maxDistance;
         bool hitNodule = false;
 
-        // 1. Raycast principale per Ostacoli e Noduli
+        // 1. Raycast principale (si ferma su Noduli o Ostacoli come ossa/vasi)
         if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, hittableLayers))
         {
             currentHitDistance = hit.distance;
@@ -85,23 +86,33 @@ public class SurgicalLaserPointer : MonoBehaviour
             {
                 hitNodule = true;
                 
-                // --- CALCOLO DELLA DISTANZA ---
                 if (distanceTextUI != null)
                 {
-                    // Secondo raycast esclusivo per trovare l'intersezione con la pelle
+                    string finalDisplayText = "";
+
+                    // --- CALCOLO PELLE ---
                     if (Physics.Raycast(origin, direction, out RaycastHit skinHit, maxDistance, skinLayer))
                     {
-                        // LA TUA IDEA: Calcoliamo la distanza tra il punto sulla pelle (skinHit.point) 
-                        // e il punto esatto in cui il laser tocca il nodulo (hit.point)
-                        float distanceInMeters = Vector3.Distance(skinHit.point, hit.point);
-                        float distanceInCm = distanceInMeters * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarsi alla scala del modello 
-                        
-                        distanceTextUI.text = $"Skin: {distanceInCm:F1} cm";
+                        float distSkin = Vector3.Distance(skinHit.point, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
+                        finalDisplayText += $"Skin: {distSkin:F1} cm\n";
                     }
                     else
                     {
-                        distanceTextUI.text = "Skin: N/A";
+                        finalDisplayText += "Skin: N/A\n";
                     }
+
+                    // --- CALCOLO PLEURA ---
+                    if (Physics.Raycast(origin, direction, out RaycastHit pleuraHit, maxDistance, pleuraLayer))
+                    {
+                        float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello
+                        finalDisplayText += $"Lungs: {distPleura:F1} cm";
+                    }
+                    else
+                    {
+                        finalDisplayText += "Lungs: N/A";
+                    }
+
+                    distanceTextUI.text = finalDisplayText;
                 }
             }
         }
@@ -110,10 +121,10 @@ public class SurgicalLaserPointer : MonoBehaviour
             lineRenderer.SetPosition(1, origin + direction * maxDistance);
         }
 
-        // Se NON stiamo colpendo un nodulo puliamo il testo sulla UI
+        // Reset del testo se colpiamo il vuoto o un ostacolo
         if (!hitNodule && distanceTextUI != null)
         {
-            distanceTextUI.text = "Skin: N/A";
+            distanceTextUI.text = "Skin: N/A\nLungs: N/A";
         }
 
         if (reticleInstance != null)
