@@ -63,6 +63,7 @@ public class AnatomyManager : MonoBehaviour
             if (skinRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = skinRenderer.gameObject.AddComponent<MeshCollider>();
+                DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false; 
             }
             // Assegniamo un layer specifico alla pelle
@@ -77,6 +78,7 @@ public class AnatomyManager : MonoBehaviour
             if (lungRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = lungRenderer.gameObject.AddComponent<MeshCollider>();
+                DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false; 
             }
             // Assegniamo un layer specifico ai polmoni
@@ -90,6 +92,7 @@ public class AnatomyManager : MonoBehaviour
             if (bonesRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = bonesRenderer.gameObject.AddComponent<MeshCollider>();
+                DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false; // False va bene per mesh complesse se usate solo per Raycast
             }
             // Assegniamo le ossa a un layer specifico (es. "Obstacle" o lo stesso dei vasi)
@@ -103,6 +106,7 @@ public class AnatomyManager : MonoBehaviour
             if (vesselsRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = vesselsRenderer.gameObject.AddComponent<MeshCollider>();
+                DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false;
             }
             // Assegniamo i vasi a un layer specifico (es. "Obstacle")
@@ -130,6 +134,7 @@ public class AnatomyManager : MonoBehaviour
             if (noduleRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = noduleRenderer.gameObject.AddComponent<MeshCollider>();
+                DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false;
             }
             // 2. Assegniamo il layer "Nodule" all'oggetto
@@ -161,6 +166,47 @@ public class AnatomyManager : MonoBehaviour
     {
         sliceSystemInstance = sliceSystem;
         Debug.Log("[AnatomyManager] Sistema di slicing registrato.");
+    }
+
+    private void DisableFastMidphaseIfAvailable(MeshCollider meshCollider)
+    {
+        if (meshCollider == null)
+        {
+            return;
+        }
+
+        var cookingOptionsProperty = typeof(MeshCollider).GetProperty("cookingOptions");
+        if (cookingOptionsProperty == null || !cookingOptionsProperty.CanRead || !cookingOptionsProperty.CanWrite)
+        {
+            return;
+        }
+
+        try
+        {
+            object currentOptions = cookingOptionsProperty.GetValue(meshCollider, null);
+            if (currentOptions == null)
+            {
+                return;
+            }
+
+            System.Type enumType = cookingOptionsProperty.PropertyType;
+            if (!System.Enum.IsDefined(enumType, "UseFastMidphase"))
+            {
+                return;
+            }
+
+            object fastMidphaseValue = System.Enum.Parse(enumType, "UseFastMidphase");
+            int currentFlags = System.Convert.ToInt32(currentOptions);
+            int fastMidphaseFlag = System.Convert.ToInt32(fastMidphaseValue);
+            object updatedFlags = System.Enum.ToObject(enumType, currentFlags & ~fastMidphaseFlag);
+
+            cookingOptionsProperty.SetValue(meshCollider, updatedFlags, null);
+        }
+        catch
+        {
+            // In alcune versioni Unity la proprietà può non essere completamente supportata a runtime.
+            // In quel caso lasciamo il collider con le opzioni default.
+        }
     }
     public void RegisterImportedModel(GameObject modelRoot)
     {
