@@ -12,9 +12,8 @@ public class SurgicalLaserPointer : MonoBehaviour
     public Color targetHitColor = Color.green;
 
     [Header("Impostazioni Mirino")]
-    public GameObject reticlePrefab;
+    public GameObject reticlePrefab; // Il tuo Quad con il materiale mostrato
     public float reticleScale = 0.5f;
-    public float reticleDistance = 0.8f;
 
     [Header("Filtri Hit (Livelli Laser)")]
     [Tooltip("Ostacoli e Noduli (es. Obstacle, Nodule)")]
@@ -45,8 +44,7 @@ public class SurgicalLaserPointer : MonoBehaviour
         lineRenderer.material.renderQueue = 4000;
         lineRenderer.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
 
-        oculusGrabbable = GetComponent<Grabbable>();
-
+        // Setup Mirino Principale
         if (reticlePrefab != null)
         {
             reticleInstance = Instantiate(reticlePrefab);
@@ -55,10 +53,15 @@ public class SurgicalLaserPointer : MonoBehaviour
 
             if (reticleRenderer != null)
             {
+                // Crea un'istanza unica del materiale per non alterare il prefab
+                reticleRenderer.material = new Material(reticleRenderer.material);
                 Material reticleMat = reticleRenderer.material;
-                reticleMat.renderQueue = 4000;
-                reticleMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
-                reticleMat.SetInt("_ZWrite", 0); 
+                
+                // --- TRUCCO PER RENDERE IL MIRINO ADERENTE E VISIBILE ---
+                // Il tuo materiale è già Transparent. Dobbiamo solo forzarlo sopra tutto.
+                reticleMat.renderQueue = 4000; // Imposta la coda di rendering su Overlay
+                reticleMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always); // Disattiva il depth test
+                reticleMat.SetInt("_ZWrite", 0); // Non scrive nel depth buffer
             }
         }
         
@@ -71,13 +74,22 @@ public class SurgicalLaserPointer : MonoBehaviour
         Vector3 direction = transform.forward;
         lineRenderer.SetPosition(0, origin);
 
-        float currentHitDistance = maxDistance;
-        bool hitNodule = false;
+        // --- NUOVA LOGICA: Il mirino si posiziona sempre sulla pelle se rilevata ---
+        bool skinHitDetected = false;
+        Vector3 skinHitPoint = origin;
+        Vector3 skinHitNormal = -direction; // Default, se non colpisce
 
-        // 1. Raycast principale (si ferma su Noduli o Ostacoli come ossa/vasi)
+        if (Physics.Raycast(origin, direction, out RaycastHit skinHit, maxDistance, skinLayer))
+        {
+            skinHitDetected = true;
+            skinHitPoint = skinHit.point;
+            skinHitNormal = skinHit.normal;
+        }
+
+        // Raycast principale (per rilevare il nodulo e le distanze)
+        bool hitNodule = false;
         if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, hittableLayers))
         {
-            currentHitDistance = hit.distance;
             lineRenderer.SetPosition(1, hit.point);
 
             string hitName = hit.collider.gameObject.name.ToLowerInvariant();
@@ -90,10 +102,10 @@ public class SurgicalLaserPointer : MonoBehaviour
                 {
                     string finalDisplayText = "";
 
-                    // --- CALCOLO PELLE ---
-                    if (Physics.Raycast(origin, direction, out RaycastHit skinHit, maxDistance, skinLayer))
+                    // Calcolo della distanza Skin-Nodule (usando il skinHitDetected calcolato sopra)
+                    if (skinHitDetected)
                     {
-                        float distSkin = Vector3.Distance(skinHit.point, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
+                        float distSkin = Vector3.Distance(skinHitPoint, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
                         finalDisplayText += $"Skin: {distSkin:F1} cm\n";
                     }
                     else
@@ -104,7 +116,7 @@ public class SurgicalLaserPointer : MonoBehaviour
                     // --- CALCOLO PLEURA ---
                     if (Physics.Raycast(origin, direction, out RaycastHit pleuraHit, maxDistance, pleuraLayer))
                     {
-                        float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello
+                        float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 20f;
                         finalDisplayText += $"Lungs: {distPleura:F1} cm";
                     }
                     else
@@ -118,21 +130,38 @@ public class SurgicalLaserPointer : MonoBehaviour
         }
         else
         {
+            // Se non colpisce noduli o ostacoli, il raggio va alla massima distanza
             lineRenderer.SetPosition(1, origin + direction * maxDistance);
         }
 
-        // Reset del testo se colpiamo il vuoto o un ostacolo
+        // Reset del testo se non colpiamo il nodulo
         if (!hitNodule && distanceTextUI != null)
         {
             distanceTextUI.text = "Skin: N/A\nLungs: N/A";
         }
 
+        // --- POSIZIONAMENTO DEL MIRINO ADERENTE ALLA PELLE ---
         if (reticleInstance != null)
         {
             reticleInstance.SetActive(true);
-            float actualDistance = Mathf.Min(reticleDistance, currentHitDistance);
-            reticleInstance.transform.position = origin + (direction * actualDistance);
-            reticleInstance.transform.rotation = Quaternion.LookRotation(direction);
+            
+            if (skinHitDetected)
+            {
+                // 1. OFFSET: Lo spingiamo all'indietro verso il laser origin (-direction) 
+                // invece che lungo la normale della pelle. 
+                // 0.02f sono 2 centimetri. Aumentalo a 0.05f se vedi che taglia ancora i bordi.
+                float offset = 0.005f; 
+                reticleInstance.transform.position = skinHitPoint - (direction * offset);
+
+                // 2. ROTAZIONE FISSA: (Come prima)
+                reticleInstance.transform.rotation = Quaternion.LookRotation(-Vector3.forward, Vector3.up);
+            }
+            else
+            {
+                // Se la pelle non è colpita
+                reticleInstance.transform.position = origin + (direction * maxDistance);
+                reticleInstance.transform.rotation = Quaternion.LookRotation(-Vector3.forward, Vector3.up); 
+            }
         }
 
         if (hitNodule) SetColor(targetHitColor);

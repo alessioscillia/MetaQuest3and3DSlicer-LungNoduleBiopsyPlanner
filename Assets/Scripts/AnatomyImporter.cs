@@ -4,7 +4,7 @@ using System;
 using System.Threading.Tasks;
 public class AnatomyImporter : MonoBehaviour
 {
-    public string modelUrl = "http://localhost:8080/model.gltf";
+    public string modelUrl = "http://127.0.0.1:8080/model.glb";
     public int maxLoadAttempts = 5;
     public float retryDelaySeconds = 0.75f;
     private Renderer skinRenderer;
