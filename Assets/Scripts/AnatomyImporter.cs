@@ -90,7 +90,7 @@ public class AnatomyImporter : MonoBehaviour
             // Scala: se Slicer Ã¨ in mm e Unity in m, serve 0.001.
             // Tu usi 0.005 probabilmente perchÃ© il modello originale era molto piccolo o per preferenza visiva.
             // NOTA: Se cambi scala, assicurati che 'OpenIGTLinkConnect' abbia il moltiplicatore inverso corretto.
-            modelContainer.transform.localScale = new Vector3(0.005f, 0.005f, 0.005f);
+            modelContainer.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
             // Rotazione: Corregge l'orientamento (da supino a in piedi)
             modelContainer.transform.localRotation = Quaternion.Euler(-90f, 0, 0);
             // --- PUNTO CRUCIALE PER L'UNIVERSALITÃ€ ---

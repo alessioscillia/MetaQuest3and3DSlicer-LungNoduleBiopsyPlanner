@@ -31,7 +31,7 @@ public class OpenIGTLinkConnect : MonoBehaviour
     public Vector3 slicerPositionOffset = Vector3.zero;
 
     ///////// GENERAL VARIABLES /////////
-    int scaleMultiplier = 200; // Help variable to transform meters to millimeters and vice versa
+    int scaleMultiplier = 1000; // Help variable to transform meters to millimeters and vice versa
 
 
     ///////// SEND /////////

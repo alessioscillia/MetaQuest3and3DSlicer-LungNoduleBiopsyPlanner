@@ -105,7 +105,7 @@ public class SurgicalLaserPointer : MonoBehaviour
                     // Calcolo della distanza Skin-Nodule (usando il skinHitDetected calcolato sopra)
                     if (skinHitDetected)
                     {
-                        float distSkin = Vector3.Distance(skinHitPoint, hit.point) * 20f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
+                        float distSkin = Vector3.Distance(skinHitPoint, hit.point) * 100f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
                         finalDisplayText += $"Skin: {distSkin:F1} cm\n";
                     }
                     else
@@ -116,7 +116,7 @@ public class SurgicalLaserPointer : MonoBehaviour
                     // --- CALCOLO PLEURA ---
                     if (Physics.Raycast(origin, direction, out RaycastHit pleuraHit, maxDistance, pleuraLayer))
                     {
-                        float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 20f;
+                        float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 100f;
                         finalDisplayText += $"Lungs: {distPleura:F1} cm";
                     }
                     else
