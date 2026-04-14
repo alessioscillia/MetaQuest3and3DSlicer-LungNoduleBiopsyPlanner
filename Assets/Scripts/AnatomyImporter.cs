@@ -228,11 +228,19 @@ void AutomateMaterialSetup(GameObject loadedModel)
             startHidden = true;
             fallbackColor = new Color(0.9f, 0.9f, 0.8f, 1.0f);
         }
-        else if (lower.Contains("vessels") || lower.Contains("vessel"))
+        
+        else if (lower.Contains("pulmonaryarter"))
         {
             isTransparent = true;
             startHidden = true;
-            fallbackColor = new Color(0.8f, 0.1f, 0.1f, 1.0f);
+            fallbackColor = new Color(0.8f, 0.1f, 0.1f, 1.0f); // Rosso Arterioso
+        }
+        // Cerca ESATTAMENTE "pulmonaryvein" (tutto attaccato)
+        else if (lower.Contains("pulmonaryvein"))
+        {
+            isTransparent = true;
+            startHidden = true;
+            fallbackColor = new Color(0.1f, 0.4f, 0.8f, 1.0f); // Blu Venoso
         }
         else if (lower.Contains("airways") || lower.Contains("airway") || lower.Contains("trachea") || lower.Contains("bronch"))
         {
@@ -258,13 +266,35 @@ void AutomateMaterialSetup(GameObject loadedModel)
         // Colore finale: prima importato, altrimenti fallback
         Color finalColor = hasImportedColor ? importedColor : fallbackColor;
         
-        // --- MODIFICA PER I NODULI ---
+        // --- MODIFICA PER I NODULI E I POLMONI ---
         if (lower.Contains("nodule"))
         {
             finalColor = Color.green; // Forza il verde puro ignorando il glTF
             // Forza lo shader standard URP per far funzionare l'emissione
             mat.shader = Shader.Find("Universal Render Pipeline/Lit"); 
         }
+        else if (lower.Contains("lung"))
+        {
+            // Forza il colore anatomico per i polmoni (Rosa Salmone) ignorando il glTF verde
+            finalColor = new Color(0.9f, 0.6f, 0.6f, 1f); 
+            // Rimuove lo shader glTF (che legge i vertici verdi) e usa quello standard di Unity
+            mat.shader = Shader.Find("Universal Render Pipeline/Lit"); 
+        }
+        else if (lower.Contains("pulmonaryarter"))
+        {
+            // Forza le ARTERIE polmonari al BLU (sangue deossigenato)
+            finalColor = new Color(0.1f, 0.4f, 0.8f, 1.0f); 
+            // Rimuove lo shader glTF e i suoi vertex colors
+            mat.shader = Shader.Find("Universal Render Pipeline/Lit"); 
+        }
+        else if (lower.Contains("pulmonaryvein"))
+        {
+            // Forza le VENE polmonari al ROSSO (sangue ossigenato)
+            finalColor = new Color(0.8f, 0.1f, 0.1f, 1.0f); 
+            // Rimuove lo shader glTF e i suoi vertex colors
+            mat.shader = Shader.Find("Universal Render Pipeline/Lit"); 
+        }
+        // -----------------------------------------
         
         SetMaterialColor(mat, finalColor);
 

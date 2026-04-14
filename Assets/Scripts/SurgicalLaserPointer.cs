@@ -47,7 +47,7 @@ public class SurgicalLaserPointer : MonoBehaviour
         // Setup Mirino Principale
         if (reticlePrefab != null)
         {
-            reticleInstance = Instantiate(reticlePrefab);
+            reticleInstance = Instantiate(reticlePrefab, transform);
             reticleInstance.transform.localScale = Vector3.one * reticleScale;
             reticleRenderer = reticleInstance.GetComponentInChildren<Renderer>();
 
@@ -147,20 +147,21 @@ public class SurgicalLaserPointer : MonoBehaviour
             
             if (skinHitDetected)
             {
-                // 1. OFFSET: Lo spingiamo all'indietro verso il laser origin (-direction) 
-                // invece che lungo la normale della pelle. 
-                // 0.02f sono 2 centimetri. Aumentalo a 0.05f se vedi che taglia ancora i bordi.
+                // 1. OFFSET: Spingiamo il mirino in fuori di 5 millimetri lungo la normale della pelle
+                // Questo impedisce fisicamente alla pelle di coprirlo.
                 float offset = 0.005f; 
-                reticleInstance.transform.position = skinHitPoint - (direction * offset);
+                reticleInstance.transform.position = skinHitPoint + (skinHitNormal * offset);
 
-                // 2. ROTAZIONE FISSA: (Come prima)
-                reticleInstance.transform.rotation = Quaternion.LookRotation(-Vector3.forward, Vector3.up);
+                // 2. ROTAZIONE: I Quad di Unity hanno la faccia visibile rivolta verso -Z.
+                // Per farlo "guardare verso l'esterno", allineiamo la sua Z verso l'interno della pelle (-skinHitNormal)
+                reticleInstance.transform.rotation = Quaternion.LookRotation(-skinHitNormal);
             }
             else
             {
-                // Se la pelle non è colpita
+                // Se la pelle non è colpita, posiziona il mirino alla massima distanza
                 reticleInstance.transform.position = origin + (direction * maxDistance);
-                reticleInstance.transform.rotation = Quaternion.LookRotation(-Vector3.forward, Vector3.up); 
+                // Qui guarda verso chi tiene il laser
+                reticleInstance.transform.rotation = Quaternion.LookRotation(-direction); 
             }
         }
 
