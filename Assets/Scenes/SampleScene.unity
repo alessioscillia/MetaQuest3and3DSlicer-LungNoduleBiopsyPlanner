@@ -3721,7 +3721,7 @@ Transform:
   m_GameObject: {fileID: 506762473}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.51908, y: -0.16657, z: 0}
+  m_LocalPosition: {x: -1.51908, y: 1, z: 1}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -5173,7 +5173,7 @@ Transform:
   m_GameObject: {fileID: 900528091}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0.021255493, y: -0.036714002, z: 0}
+  m_LocalPosition: {x: 0.021255493, y: 0.52, z: 0}
   m_LocalScale: {x: 1.3, y: 0.1, z: 0.1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -6396,7 +6396,6 @@ GameObject:
   - component: {fileID: 1138683027}
   - component: {fileID: 1138683029}
   - component: {fileID: 1138683028}
-  - component: {fileID: 1138683030}
   m_Layer: 5
   m_Name: Canvas
   m_TagString: Untagged
@@ -6490,7 +6489,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: 0.019080162, y: -0.53343}
+  m_AnchoredPosition: {x: 0.02125549, y: 0.02125549}
   m_SizeDelta: {x: 1300, y: 1100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!65 &1138683027
@@ -6529,8 +6528,8 @@ MonoBehaviour:
   _transferOnSecondSelection: 0
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
-  _oneGrabTransformer: {fileID: 1138683030}
-  _twoGrabTransformer: {fileID: 1138683030}
+  _oneGrabTransformer: {fileID: 0}
+  _twoGrabTransformer: {fileID: 0}
   _targetTransform: {fileID: 0}
   _maxGrabPoints: -1
   _rigidbody: {fileID: 1138683029}
@@ -6564,69 +6563,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &1138683030
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1138683022}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bbb7085c111fcb44493d57d4e336d3fd, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Oculus.Interaction::Oculus.Interaction.GrabFreeTransformer
-  _positionConstraints:
-    ConstraintsAreRelative: 0
-    XAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-    YAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-    ZAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-  _rotationConstraints:
-    XAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-    YAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-    ZAxis:
-      ConstrainAxis: 0
-      AxisRange:
-        Min: 0
-        Max: 0
-  _scaleConstraints:
-    ConstraintsAreRelative: 1
-    XAxis:
-      ConstrainAxis: 1
-      AxisRange:
-        Min: 1
-        Max: 2
-    YAxis:
-      ConstrainAxis: 1
-      AxisRange:
-        Min: 1
-        Max: 2
-    ZAxis:
-      ConstrainAxis: 1
-      AxisRange:
-        Min: 1
-        Max: 2
-  _resetScaleResponsivenessOnConstraintOvershoot: 0
 --- !u!1 &1146395080
 GameObject:
   m_ObjectHideFlags: 0

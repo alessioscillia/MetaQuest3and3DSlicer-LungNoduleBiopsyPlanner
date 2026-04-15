@@ -23,7 +23,7 @@ public class AnatomyManager : MonoBehaviour
     [Header("Slice System")]
     [SerializeField] private GameObject sliceSystemInstance;
     
-    // NUOVO: Variabili per gestire il Fixed Plane e il tracking della UI
+    // Variabili per gestire il Fixed Plane e il tracking della UI
     [Header("Fixed Plane & UI Tracking")]
     [Tooltip("Inserisci qui il prefab del FixedImagePlane")]
     [SerializeField] private GameObject fixedImagePlanePrefab;
@@ -32,6 +32,11 @@ public class AnatomyManager : MonoBehaviour
     [Tooltip("Distanza in metri a sinistra del Canvas")]
     [SerializeField] private float offsetLeft = 0.4f;
     private GameObject spawnedFixedPlane; // L'istanza creata a runtime
+
+    // --- NUOVO: Variabili per il calcolo della scala proporzionale ---
+    private Vector3 initialPlaneScale; 
+    private float initialContainerScaleX;
+    // -----------------------------------------------------------------
 
     [Header("Interaction")]
     [Tooltip("Inserisci qui il prefab ISDK_RayGrabInteraction da attaccare all'ago")]
@@ -50,8 +55,7 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Text needlePathToggleText;
     [SerializeField] private Text tsToggleText;
 
-    // --- NUOVO: Slider UI Reference ---
-    // Aggiungi questi riferimenti per aggiornare visualmente gli slider quando TS si attiva
+    // UI Slider Reference
     [Header("UI Sliders")]
     [SerializeField] private Slider lungsOpacitySlider;
     [SerializeField] private Slider bonesOpacitySlider;
@@ -80,10 +84,30 @@ public class AnatomyManager : MonoBehaviour
         // Se il piano fisso è attivo e abbiamo il riferimento al Canvas...
         if (spawnedFixedPlane != null && spawnedFixedPlane.activeInHierarchy && canvasTransform != null)
         {
-            // Posizionalo alla sinistra del Canvas
-            spawnedFixedPlane.transform.position = canvasTransform.position - (canvasTransform.right * offsetLeft);
-            // Copia la rotazione del Canvas
+            // --- MODIFICATO: Logica di aggiornamento per posizione, rotazione e scala proporzionale ---
+            
+            // 1. Troviamo il Menu Container (il padre del Canvas)
+            Transform menuContainer = canvasTransform.parent;
+            
+            // 2. Otteniamo la scala globale attuale sull'asse X (lossyScale è il più affidabile per dimensioni visive globali)
+            float currentContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
+            
+            // 3. Calcoliamo il rapporto di scala (es. se la scala è raddoppiata, il ratio sarà 2)
+            float scaleRatio = (initialContainerScaleX > 0f) ? (currentContainerScaleX / initialContainerScaleX) : 1f;
+
+            // 4. Aggiorniamo la dimensione del piano fisso proporzionalmente
+            spawnedFixedPlane.transform.localScale = initialPlaneScale * scaleRatio;
+
+            // 5. Scaliamo l'offset in modo che la distanza rimanga coerente con la nuova dimensione (no sovrapposizioni)
+            float currentOffsetLeft = offsetLeft * scaleRatio;
+
+            // 6. Posizionalo alla sinistra del Canvas applicando il nuovo offset
+            spawnedFixedPlane.transform.position = canvasTransform.position - (canvasTransform.right * currentOffsetLeft);
+            
+            // 7. Copia la rotazione del Canvas
             spawnedFixedPlane.transform.rotation = canvasTransform.rotation;
+            
+            // ------------------------------------------------------------------------------------------
         }
     }
 
@@ -267,12 +291,11 @@ public class AnatomyManager : MonoBehaviour
         awVesselsOpacity = Mathf.Clamp01(value);
         float effectiveOpacity = isTSVisible ? tsMasterOpacity : awVesselsOpacity;
         SetOpacity(vesselsRenderer, effectiveOpacity);
-        SetOpacity(arteriesRenderer, effectiveOpacity); // NUOVO
-        SetOpacity(veinsRenderer, effectiveOpacity);    // NUOVO
+        SetOpacity(arteriesRenderer, effectiveOpacity);
+        SetOpacity(veinsRenderer, effectiveOpacity);    
         SetOpacity(airwaysRenderer, effectiveOpacity);
     }
     
-    // --- MODIFICATO: UpdateTSOpacity ora allinea le variabili interne e (se assegnati) gli slider UI ---
     public void UpdateTSOpacity(float value)
     {
         tsMasterOpacity = Mathf.Clamp01(value);
@@ -298,7 +321,6 @@ public class AnatomyManager : MonoBehaviour
         foreach (Renderer rend in totalSegmentatorRenderers) SetOpacity(rend, tsMasterOpacity);
     }
     
-    // --- MODIFICATO: TOGGLE TS ---
     public void ToggleTS(bool isVisible)
     {
         isTSVisible = isVisible;
@@ -306,8 +328,8 @@ public class AnatomyManager : MonoBehaviour
         if (bonesRenderer) bonesRenderer.enabled = isVisible;
         if (lungRenderer) lungRenderer.enabled = isVisible;
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible;
-        if (arteriesRenderer) arteriesRenderer.enabled = isVisible; // NUOVO
-        if (veinsRenderer) veinsRenderer.enabled = isVisible;       // NUOVO
+        if (arteriesRenderer) arteriesRenderer.enabled = isVisible; 
+        if (veinsRenderer) veinsRenderer.enabled = isVisible;       
         if (airwaysRenderer) airwaysRenderer.enabled = isVisible;
         foreach (Renderer rend in totalSegmentatorRenderers) if (rend) rend.enabled = isVisible;
 
@@ -330,16 +352,10 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(bonesRenderer, tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
             SetOpacity(airwaysRenderer, tsMasterOpacity);
-            SetOpacity(arteriesRenderer, tsMasterOpacity); // NUOVO
-            SetOpacity(veinsRenderer, tsMasterOpacity);    // NUOVO
+            SetOpacity(arteriesRenderer, tsMasterOpacity); 
+            SetOpacity(veinsRenderer, tsMasterOpacity);    
             
             foreach (Renderer rend in totalSegmentatorRenderers) SetOpacity(rend, tsMasterOpacity);
-        }
-        else
-        {
-            // Se spegniamo TS, l'opacità torna gestita in modo indipendente, 
-            // ma al momento mantengono l'ultimo valore impostato. 
-            // (Opzionale: potresti voler salvare il loro valore "pre-TS" e ripristinarlo qui)
         }
 
         if (tsToggleText) tsToggleText.text = isVisible ? "TS ON" : "TS OFF";
@@ -351,8 +367,8 @@ public class AnatomyManager : MonoBehaviour
     public void ToggleVessels(bool isVisible) 
     { 
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible; 
-        if (arteriesRenderer) arteriesRenderer.enabled = isVisible; // NUOVO
-        if (veinsRenderer) veinsRenderer.enabled = isVisible;       // NUOVO
+        if (arteriesRenderer) arteriesRenderer.enabled = isVisible; 
+        if (veinsRenderer) veinsRenderer.enabled = isVisible;       
         if (airwaysRenderer) airwaysRenderer.enabled = isVisible; 
         if (awVesselsToggleText) awVesselsToggleText.text = isVisible ? "AWVessels ON" : "AWVessels OFF"; 
     }
@@ -395,6 +411,13 @@ public class AnatomyManager : MonoBehaviour
             if (spawnedFixedPlane == null && fixedImagePlanePrefab != null)
             {
                 spawnedFixedPlane = Instantiate(fixedImagePlanePrefab);
+                
+                // --- NUOVO: Salviamo le scale iniziali per calcolare il ratio successivamente ---
+                initialPlaneScale = spawnedFixedPlane.transform.localScale;
+                Transform menuContainer = canvasTransform != null ? canvasTransform.parent : null;
+                initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : (canvasTransform != null ? canvasTransform.lossyScale.x : 1f);
+                // --------------------------------------------------------------------------------
+
                 OpenIGTLinkConnect igtConnect = FindObjectOfType<OpenIGTLinkConnect>();
                 if (igtConnect != null)
                 {
