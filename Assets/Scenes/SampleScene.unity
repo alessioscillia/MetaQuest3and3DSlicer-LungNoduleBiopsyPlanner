@@ -3628,18 +3628,18 @@ MonoBehaviour:
     XAxis:
       ConstrainAxis: 1
       AxisRange:
-        Min: 1
-        Max: 1
+        Min: 0.1
+        Max: 2
     YAxis:
       ConstrainAxis: 1
       AxisRange:
-        Min: 1
-        Max: 1
+        Min: 0.1
+        Max: 2
     ZAxis:
       ConstrainAxis: 1
       AxisRange:
-        Min: 1
-        Max: 1
+        Min: 0.1
+        Max: 2
   _resetScaleResponsivenessOnConstraintOvershoot: 0
 --- !u!135 &506762475
 SphereCollider:
@@ -3677,8 +3677,8 @@ MonoBehaviour:
   _transferOnSecondSelection: 0
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
-  _oneGrabTransformer: {fileID: 0}
-  _twoGrabTransformer: {fileID: 0}
+  _oneGrabTransformer: {fileID: 506762474}
+  _twoGrabTransformer: {fileID: 506762474}
   _targetTransform: {fileID: 506762478}
   _maxGrabPoints: -1
   _rigidbody: {fileID: 506762477}
@@ -4383,6 +4383,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 678755926}
   m_CullTransparentMesh: 1
+--- !u!1 &684996324
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 684996325}
+  m_Layer: 0
+  m_Name: glTF-StableFramerate
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &684996325
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 684996324}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &749850560
 GameObject:
   m_ObjectHideFlags: 0
@@ -5608,6 +5639,8 @@ MonoBehaviour:
   airwaysRenderer: {fileID: 0}
   noduleRenderer: {fileID: 0}
   toolRenderer: {fileID: 0}
+  arteriesRenderer: {fileID: 0}
+  veinsRenderer: {fileID: 0}
   sliceSystemInstance: {fileID: 0}
   fixedImagePlanePrefab: {fileID: 6826305203497137091, guid: 8e7da5f282e26c6469d0b48d0158f0c5, type: 3}
   canvasTransform: {fileID: 1138683026}
@@ -6496,8 +6529,8 @@ MonoBehaviour:
   _transferOnSecondSelection: 0
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
-  _oneGrabTransformer: {fileID: 0}
-  _twoGrabTransformer: {fileID: 0}
+  _oneGrabTransformer: {fileID: 1138683030}
+  _twoGrabTransformer: {fileID: 1138683030}
   _targetTransform: {fileID: 0}
   _maxGrabPoints: -1
   _rigidbody: {fileID: 1138683029}
@@ -6582,17 +6615,17 @@ MonoBehaviour:
       ConstrainAxis: 1
       AxisRange:
         Min: 1
-        Max: 1
+        Max: 2
     YAxis:
       ConstrainAxis: 1
       AxisRange:
         Min: 1
-        Max: 1
+        Max: 2
     ZAxis:
       ConstrainAxis: 1
       AxisRange:
         Min: 1
-        Max: 1
+        Max: 2
   _resetScaleResponsivenessOnConstraintOvershoot: 0
 --- !u!1 &1146395080
 GameObject:
@@ -7190,6 +7223,37 @@ RectTransform:
   m_AnchoredPosition: {x: -5, y: 0}
   m_SizeDelta: {x: -20, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!1 &1334732017
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1334732018}
+  m_Layer: 0
+  m_Name: glTF-StableFramerate
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1334732018
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1334732017}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1337322356
 GameObject:
   m_ObjectHideFlags: 0
@@ -7655,6 +7719,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1484498349}
   m_CullTransparentMesh: 1
+--- !u!1 &1500486957
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1500486958}
+  m_Layer: 0
+  m_Name: glTF-StableFramerate
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1500486958
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1500486957}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1505886587
 GameObject:
   m_ObjectHideFlags: 0
@@ -9844,7 +9939,7 @@ MonoBehaviour:
   normalColor: {r: 1, g: 0, b: 0, a: 1}
   targetHitColor: {r: 0, g: 1, b: 0, a: 1}
   reticlePrefab: {fileID: 2618386071769914512, guid: 13195eb09e229d74391bc9e703335b0f, type: 3}
-  reticleScale: 2
+  reticleScale: 1
   hittableLayers:
     serializedVersion: 2
     m_Bits: 384
@@ -10757,3 +10852,6 @@ SceneRoots:
   - {fileID: 2056923539}
   - {fileID: 1149906731}
   - {fileID: 506762478}
+  - {fileID: 1500486958}
+  - {fileID: 1334732018}
+  - {fileID: 684996325}
