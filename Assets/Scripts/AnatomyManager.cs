@@ -8,6 +8,7 @@ public class AnatomyManager : MonoBehaviour
 {
     // SINGLETON
     public static AnatomyManager Instance;
+    
     [Header("Debug Info")]
     [SerializeField] private Renderer skinRenderer;
     [SerializeField] private Renderer lungRenderer;
@@ -45,6 +46,10 @@ public class AnatomyManager : MonoBehaviour
     private GameObject importedModelRoot;
     private GameObject modelRayGrabInteractionInstance;
     
+    [Header("Custom Settings")]
+    [Tooltip("Trascina qui il Prefab del tuo GrabFreeTransformer configurato a mano (con i limiti min/max)")]
+    [SerializeField] private GrabFreeTransformer customScaleTransformerPrefab;
+
     [Header("Toggle Texts")]
     [SerializeField] private Text skinToggleText;
     [SerializeField] private Text lungsToggleText;
@@ -75,13 +80,11 @@ public class AnatomyManager : MonoBehaviour
         ToggleTool(false);
     }
 
-    // --- NUOVO: Salviamo la scala originale del Canvas all'avvio della scena ---
     private void Start()
     {
         if (canvasTransform != null)
         {
             Transform menuContainer = canvasTransform.parent;
-            // Salviamo la dimensione di base PRIMA che l'utente possa ingrandirla/rimpicciolirla
             initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
         }
     }
@@ -90,7 +93,6 @@ public class AnatomyManager : MonoBehaviour
     {
         if (spawnedFixedPlane != null && spawnedFixedPlane.activeInHierarchy && canvasTransform != null)
         {
-            // Failsafe: se per qualche motivo Start non ha trovato il canvas, ci riprova qui
             if (initialContainerScaleX < 0f)
             {
                 Transform container = canvasTransform.parent;
@@ -100,10 +102,8 @@ public class AnatomyManager : MonoBehaviour
             Transform menuContainer = canvasTransform.parent;
             float currentContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
             
-            // Calcoliamo il rapporto confrontando la scala attuale con quella originale (non modificata)
             float scaleRatio = (initialContainerScaleX > 0f) ? (currentContainerScaleX / initialContainerScaleX) : 1f;
 
-            // Aggiorniamo scala e posizione in base al ratio calcolato
             spawnedFixedPlane.transform.localScale = initialPlaneScale * scaleRatio;
             float currentOffsetLeft = offsetLeft * scaleRatio;
             spawnedFixedPlane.transform.position = canvasTransform.position - (canvasTransform.right * currentOffsetLeft);
@@ -111,7 +111,6 @@ public class AnatomyManager : MonoBehaviour
         }
     }
 
-    // --- REGISTRAZIONE AUTOMATICA ---
     public void RegisterOrganRenderer(string objName, Renderer rend)
     {
         string lowerName = objName.ToLower();
@@ -216,6 +215,7 @@ public class AnatomyManager : MonoBehaviour
             }
         }
     }
+
     public void RegisterSliceSystem(GameObject sliceSystem)
     {
         sliceSystemInstance = sliceSystem;
@@ -240,6 +240,7 @@ public class AnatomyManager : MonoBehaviour
         }
         catch { }
     }
+
     public void RegisterImportedModel(GameObject modelRoot)
     {
         importedModelRoot = modelRoot;
@@ -363,6 +364,7 @@ public class AnatomyManager : MonoBehaviour
     }
     
     public void ToggleNodule(bool isVisible) { if (noduleRenderer) noduleRenderer.enabled = isVisible; }
+    
     public void ModifyModel() { if (EnsureModelRayGrabInteraction()) { modelRayGrabInteractionInstance.SetActive(true); Debug.Log("[AnatomyManager] Modify Model: interazione attiva."); } }
     public void FixModel() { if (modelRayGrabInteractionInstance != null) { modelRayGrabInteractionInstance.SetActive(false); } Debug.Log("[AnatomyManager] Fix Model: modello bloccato."); }
     
@@ -386,10 +388,19 @@ public class AnatomyManager : MonoBehaviour
                     toolRb.isKinematic = true;
 
                     Grabbable toolGrabbable = EnsureComponent<Grabbable>(toolObj);
-                    OneGrabTranslateTransformer oneGrabTranslate = EnsureComponent<OneGrabTranslateTransformer>(toolObj);
-                    GrabFreeTransformer grabFreeTransformer = EnsureComponent<GrabFreeTransformer>(toolObj);
+                    
+                    // --- USA IL PREFAB SE ESISTE, ALTRIMENTI USA QUELLO BASE ---
+                    GrabFreeTransformer activeTransformer;
+                    if (customScaleTransformerPrefab != null)
+                    {
+                        activeTransformer = Instantiate(customScaleTransformerPrefab, toolObj.transform);
+                    }
+                    else
+                    {
+                        activeTransformer = EnsureComponent<GrabFreeTransformer>(toolObj);
+                    }
 
-                    ConfigureGrabbable(toolGrabbable, toolRb, toolObj.transform, oneGrabTranslate, grabFreeTransformer);
+                    ConfigureGrabbable(toolGrabbable, toolRb, toolObj.transform, activeTransformer, activeTransformer);
                     WireRayGrabComponents(activeRayGrabInteraction, toolCollider, toolGrabbable);
                 }
                 else if (activeRayGrabInteraction != null) { activeRayGrabInteraction.SetActive(true); }
@@ -414,9 +425,7 @@ public class AnatomyManager : MonoBehaviour
             {
                 spawnedFixedPlane = Instantiate(fixedImagePlanePrefab);
                 
-                // --- MODIFICATO: Salviamo SOLO la scala nativa del piano ---
                 initialPlaneScale = spawnedFixedPlane.transform.localScale;
-                // Rimosso il salvataggio di initialContainerScaleX da qui
 
                 OpenIGTLinkConnect igtConnect = FindObjectOfType<OpenIGTLinkConnect>();
                 if (igtConnect != null)
@@ -442,9 +451,28 @@ public class AnatomyManager : MonoBehaviour
         Collider modelCollider = EnsureModelCollider(importedModelRoot);
         Rigidbody modelRigidbody = EnsureModelRigidbody(importedModelRoot);
         Grabbable modelGrabbable = EnsureComponent<Grabbable>(importedModelRoot);
-        OneGrabTranslateTransformer oneGrabTranslate = EnsureComponent<OneGrabTranslateTransformer>(importedModelRoot);
-        GrabFreeTransformer grabFreeTransformer = EnsureComponent<GrabFreeTransformer>(importedModelRoot);
-        ConfigureGrabbable(modelGrabbable, modelRigidbody, importedModelRoot.transform, oneGrabTranslate, grabFreeTransformer);
+        
+        // --- USA IL PREFAB SE ESISTE, ALTRIMENTI USA QUELLO BASE ---
+        GrabFreeTransformer activeTransformer;
+        
+        // Cerca se l'abbiamo già istanziato per non crearne doppi
+        GrabFreeTransformer existingTransformer = importedModelRoot.GetComponentInChildren<GrabFreeTransformer>();
+        
+        if (existingTransformer != null && existingTransformer.gameObject != importedModelRoot)
+        {
+            activeTransformer = existingTransformer;
+        }
+        else if (customScaleTransformerPrefab != null)
+        {
+            activeTransformer = Instantiate(customScaleTransformerPrefab, importedModelRoot.transform);
+        }
+        else
+        {
+            activeTransformer = EnsureComponent<GrabFreeTransformer>(importedModelRoot);
+        }
+        
+        ConfigureGrabbable(modelGrabbable, modelRigidbody, importedModelRoot.transform, activeTransformer, activeTransformer);
+        
         if (modelRayGrabInteractionInstance != null)
         {
             WireRayGrabComponents(modelRayGrabInteractionInstance, modelCollider, modelGrabbable);
@@ -484,11 +512,23 @@ public class AnatomyManager : MonoBehaviour
         modelRoot.layer = LayerMask.NameToLayer("GrabbableModel");
         return box;
     }
+
     private Rigidbody EnsureModelRigidbody(GameObject modelRoot) { Rigidbody rb = modelRoot.GetComponent<Rigidbody>(); if (rb == null) rb = modelRoot.AddComponent<Rigidbody>(); rb.useGravity = false; rb.isKinematic = true; return rb; }
     private Bounds CalculateHierarchyBounds(GameObject root) { Renderer[] renderers = root.GetComponentsInChildren<Renderer>(); if (renderers.Length == 0) return new Bounds(root.transform.position, Vector3.one * 0.1f); Bounds bounds = renderers[0].bounds; for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds); return bounds; }
     private T EnsureComponent<T>(GameObject target) where T : Component { T comp = target.GetComponent<T>(); if (comp == null) comp = target.AddComponent<T>(); return comp; }
+    
     private void WireRayGrabComponents(GameObject rayGrabRoot, Collider modelCollider, Grabbable modelGrabbable) { RayInteractable rayInteractable = EnsureComponent<RayInteractable>(rayGrabRoot); MoveFromTargetProvider moveFromTargetProvider = EnsureComponent<MoveFromTargetProvider>(rayGrabRoot); ColliderSurface colliderSurface = EnsureComponent<ColliderSurface>(rayGrabRoot); ConfigureColliderSurface(colliderSurface, modelCollider); ConfigureRayInteractable(rayInteractable, modelGrabbable, colliderSurface, moveFromTargetProvider); }
-    private void ConfigureGrabbable(Grabbable grabbable, Rigidbody rb, Transform targetTransform, OneGrabTranslateTransformer oneGrabTranslate, GrabFreeTransformer grabFreeTransformer) { if (grabbable == null) return; grabbable.InjectOptionalRigidbody(rb); grabbable.InjectOptionalTargetTransform(targetTransform); ITransformer oneGrab = oneGrabTranslate != null ? oneGrabTranslate : grabFreeTransformer; ITransformer twoGrab = grabFreeTransformer != null ? grabFreeTransformer : oneGrab; if (oneGrab != null) grabbable.InjectOptionalOneGrabTransformer(oneGrab); if (twoGrab != null) grabbable.InjectOptionalTwoGrabTransformer(twoGrab); }
+    
+    private void ConfigureGrabbable(Grabbable grabbable, Rigidbody rb, Transform targetTransform, ITransformer oneGrab, ITransformer twoGrab) 
+    { 
+        if (grabbable == null) return; 
+        grabbable.InjectOptionalRigidbody(rb); 
+        grabbable.InjectOptionalTargetTransform(targetTransform); 
+        
+        if (oneGrab != null) grabbable.InjectOptionalOneGrabTransformer(oneGrab); 
+        if (twoGrab != null) grabbable.InjectOptionalTwoGrabTransformer(twoGrab); 
+    }
+    
     private void ConfigureColliderSurface(ColliderSurface colliderSurface, Collider modelCollider) { if (colliderSurface == null) return; colliderSurface.InjectCollider(modelCollider); }
     private void ConfigureRayInteractable(RayInteractable rayInteractable, Grabbable pointableElement, ColliderSurface surface, MoveFromTargetProvider movementProvider) { if (rayInteractable == null) return; if (surface != null) rayInteractable.InjectSurface(surface); if (pointableElement != null) rayInteractable.InjectOptionalPointableElement(pointableElement); if (movementProvider != null) rayInteractable.InjectOptionalMovementProvider(movementProvider); }
 }
