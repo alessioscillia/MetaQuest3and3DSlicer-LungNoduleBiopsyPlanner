@@ -92,7 +92,7 @@ public class AnatomyImporter : MonoBehaviour
             // NOTA: Se cambi scala, assicurati che 'OpenIGTLinkConnect' abbia il moltiplicatore inverso corretto.
             modelContainer.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
             // Rotazione: Corregge l'orientamento (da supino a in piedi)
-            modelContainer.transform.localRotation = Quaternion.Euler(-90f, 0, 0);
+            modelContainer.transform.localRotation = Quaternion.Euler(0, 0, 0);
             // --- PUNTO CRUCIALE PER L'UNIVERSALITÃ€ ---
             // NON spostare il modello. Lascialo a (0,0,0).
             // In questo modo, l'origine del file GLTF coincide perfettamente con l'origine del Mondo Unity.
@@ -108,14 +108,14 @@ public class AnatomyImporter : MonoBehaviour
             }
             // 3. Inizializza lo slicer basandosi sulla geometria caricata
             InitializeSliceSystem(modelContainer);
-//            if (SurgicalAlignment.Instance != null)
-//            {
-//                SurgicalAlignment.Instance.SetHologram(modelContainer);
-//            }
-//            else
-//            {
-//                Debug.LogWarning("Modello caricato, ma SurgicalAlignment non trovato nella scena.");
-  //          }
+           if (SurgicalAlignment.Instance != null)
+           {
+               SurgicalAlignment.Instance.SetHologram(modelContainer);
+           }
+           else
+           {
+               Debug.LogWarning("Modello caricato, ma SurgicalAlignment non trovato nella scena.");
+           }
         }
         finally
         {
