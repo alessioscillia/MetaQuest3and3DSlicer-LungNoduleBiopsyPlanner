@@ -4291,7 +4291,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::LaserUIManager
   laserPointer: {fileID: 2056923532}
   playerCamera: {fileID: 1902257012}
-  spawnDistanceInFront: 1.8
+  spawnDistanceInFront: 1
 --- !u!4 &650684359
 Transform:
   m_ObjectHideFlags: 0
@@ -9474,7 +9474,7 @@ MonoBehaviour:
       m_Calls:
       - m_Target: {fileID: 650684358}
         m_TargetAssemblyTypeName: LaserUIManager, Assembly-CSharp
-        m_MethodName: OnSpawnLaserClicked
+        m_MethodName: OnToggleNeedleClicked
         m_Mode: 1
         m_Arguments:
           m_ObjectArgument: {fileID: 0}

@@ -23,7 +23,6 @@ public class AnatomyManager : MonoBehaviour
     [Header("Slice System")]
     [SerializeField] private GameObject sliceSystemInstance;
     
-    // Variabili per gestire il Fixed Plane e il tracking della UI
     [Header("Fixed Plane & UI Tracking")]
     [Tooltip("Inserisci qui il prefab del FixedImagePlane")]
     [SerializeField] private GameObject fixedImagePlanePrefab;
@@ -33,15 +32,14 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private float offsetLeft = 0.4f;
     private GameObject spawnedFixedPlane; // L'istanza creata a runtime
 
-    // --- NUOVO: Variabili per il calcolo della scala proporzionale ---
+    // Variabili per il calcolo della scala proporzionale
     private Vector3 initialPlaneScale; 
-    private float initialContainerScaleX;
-    // -----------------------------------------------------------------
+    private float initialContainerScaleX = -1f; // Inizializzato a -1 per sicurezza
 
     [Header("Interaction")]
     [Tooltip("Inserisci qui il prefab ISDK_RayGrabInteraction da attaccare all'ago")]
     [SerializeField] private GameObject rayGrabInteractionPrefab;
-    private GameObject activeRayGrabInteraction; // Tiene traccia dell'oggetto istanziato
+    private GameObject activeRayGrabInteraction; 
     [Tooltip("Prefab ISDK_RayGrabInteraction da attaccare al modello importato (TotalSegmentatorModel)")]
     [SerializeField] private GameObject modelRayGrabInteractionPrefab;
     private GameObject importedModelRoot;
@@ -55,7 +53,6 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Text needlePathToggleText;
     [SerializeField] private Text tsToggleText;
 
-    // UI Slider Reference
     [Header("UI Sliders")]
     [SerializeField] private Slider lungsOpacitySlider;
     [SerializeField] private Slider bonesOpacitySlider;
@@ -75,39 +72,42 @@ public class AnatomyManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
         totalSegmentatorRenderers = new System.Collections.Generic.List<Renderer>();
-        // Il Tool deve essere inizialmente spento.
         ToggleTool(false);
+    }
+
+    // --- NUOVO: Salviamo la scala originale del Canvas all'avvio della scena ---
+    private void Start()
+    {
+        if (canvasTransform != null)
+        {
+            Transform menuContainer = canvasTransform.parent;
+            // Salviamo la dimensione di base PRIMA che l'utente possa ingrandirla/rimpicciolirla
+            initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
+        }
     }
 
     private void Update()
     {
-        // Se il piano fisso è attivo e abbiamo il riferimento al Canvas...
         if (spawnedFixedPlane != null && spawnedFixedPlane.activeInHierarchy && canvasTransform != null)
         {
-            // --- MODIFICATO: Logica di aggiornamento per posizione, rotazione e scala proporzionale ---
-            
-            // 1. Troviamo il Menu Container (il padre del Canvas)
+            // Failsafe: se per qualche motivo Start non ha trovato il canvas, ci riprova qui
+            if (initialContainerScaleX < 0f)
+            {
+                Transform container = canvasTransform.parent;
+                initialContainerScaleX = container != null ? container.lossyScale.x : canvasTransform.lossyScale.x;
+            }
+
             Transform menuContainer = canvasTransform.parent;
-            
-            // 2. Otteniamo la scala globale attuale sull'asse X (lossyScale è il più affidabile per dimensioni visive globali)
             float currentContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
             
-            // 3. Calcoliamo il rapporto di scala (es. se la scala è raddoppiata, il ratio sarà 2)
+            // Calcoliamo il rapporto confrontando la scala attuale con quella originale (non modificata)
             float scaleRatio = (initialContainerScaleX > 0f) ? (currentContainerScaleX / initialContainerScaleX) : 1f;
 
-            // 4. Aggiorniamo la dimensione del piano fisso proporzionalmente
+            // Aggiorniamo scala e posizione in base al ratio calcolato
             spawnedFixedPlane.transform.localScale = initialPlaneScale * scaleRatio;
-
-            // 5. Scaliamo l'offset in modo che la distanza rimanga coerente con la nuova dimensione (no sovrapposizioni)
             float currentOffsetLeft = offsetLeft * scaleRatio;
-
-            // 6. Posizionalo alla sinistra del Canvas applicando il nuovo offset
             spawnedFixedPlane.transform.position = canvasTransform.position - (canvasTransform.right * currentOffsetLeft);
-            
-            // 7. Copia la rotazione del Canvas
             spawnedFixedPlane.transform.rotation = canvasTransform.rotation;
-            
-            // ------------------------------------------------------------------------------------------
         }
     }
 
@@ -160,8 +160,6 @@ public class AnatomyManager : MonoBehaviour
             }
             vesselsRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
-
-        // Intercetta ESATTAMENTE le arterie polmonari
         else if (lowerName.Contains("pulmonaryarter")) 
         {
             arteriesRenderer = rend;
@@ -173,7 +171,6 @@ public class AnatomyManager : MonoBehaviour
             }
             arteriesRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
-        // Intercetta ESATTAMENTE le vene polmonari
         else if (lowerName.Contains("pulmonaryvein")) 
         {
             veinsRenderer = rend;
@@ -185,7 +182,6 @@ public class AnatomyManager : MonoBehaviour
             }
             veinsRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
-
         else if (lowerName.Contains("airways") || lowerName.Contains("trachea")) 
         {
             airwaysRenderer = rend;
@@ -302,12 +298,10 @@ public class AnatomyManager : MonoBehaviour
 
         if (isTSVisible)
         {
-            // Allinea le variabili locali al master
             lungOpacity = tsMasterOpacity;
             bonesOpacity = tsMasterOpacity;
             awVesselsOpacity = tsMasterOpacity;
 
-            // Aggiorna visivamente gli slider UI, in modo che l'interfaccia non sia fuori sync
             if (lungsOpacitySlider != null) lungsOpacitySlider.value = lungOpacity;
             if (bonesOpacitySlider != null) bonesOpacitySlider.value = bonesOpacity;
             if (awVesselsOpacitySlider != null) awVesselsOpacitySlider.value = awVesselsOpacity;
@@ -335,19 +329,14 @@ public class AnatomyManager : MonoBehaviour
 
         if (isVisible) 
         {
-            // Se accendiamo il TS, imponiamo immediatamente a tutti i distretti l'opacità del TS
-            
-            // Allineiamo le variabili
             lungOpacity = tsMasterOpacity;
             bonesOpacity = tsMasterOpacity;
             awVesselsOpacity = tsMasterOpacity;
 
-            // Aggiorniamo la UI degli slider per riflettere il nuovo valore forzato
             if (lungsOpacitySlider != null) lungsOpacitySlider.value = lungOpacity;
             if (bonesOpacitySlider != null) bonesOpacitySlider.value = bonesOpacity;
             if (awVesselsOpacitySlider != null) awVesselsOpacitySlider.value = awVesselsOpacity;
 
-            // Applichiamo i materiali
             SetOpacity(lungRenderer, tsMasterOpacity);
             SetOpacity(bonesRenderer, tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
@@ -389,6 +378,19 @@ public class AnatomyManager : MonoBehaviour
                     activeRayGrabInteraction = Instantiate(rayGrabInteractionPrefab, toolRenderer.transform);
                     activeRayGrabInteraction.transform.localPosition = Vector3.zero;
                     activeRayGrabInteraction.transform.localRotation = Quaternion.identity;
+
+                    GameObject toolObj = toolRenderer.gameObject;
+                    Collider toolCollider = toolObj.GetComponent<Collider>();
+                    Rigidbody toolRb = EnsureComponent<Rigidbody>(toolObj);
+                    toolRb.useGravity = false;
+                    toolRb.isKinematic = true;
+
+                    Grabbable toolGrabbable = EnsureComponent<Grabbable>(toolObj);
+                    OneGrabTranslateTransformer oneGrabTranslate = EnsureComponent<OneGrabTranslateTransformer>(toolObj);
+                    GrabFreeTransformer grabFreeTransformer = EnsureComponent<GrabFreeTransformer>(toolObj);
+
+                    ConfigureGrabbable(toolGrabbable, toolRb, toolObj.transform, oneGrabTranslate, grabFreeTransformer);
+                    WireRayGrabComponents(activeRayGrabInteraction, toolCollider, toolGrabbable);
                 }
                 else if (activeRayGrabInteraction != null) { activeRayGrabInteraction.SetActive(true); }
             }
@@ -412,11 +414,9 @@ public class AnatomyManager : MonoBehaviour
             {
                 spawnedFixedPlane = Instantiate(fixedImagePlanePrefab);
                 
-                // --- NUOVO: Salviamo le scale iniziali per calcolare il ratio successivamente ---
+                // --- MODIFICATO: Salviamo SOLO la scala nativa del piano ---
                 initialPlaneScale = spawnedFixedPlane.transform.localScale;
-                Transform menuContainer = canvasTransform != null ? canvasTransform.parent : null;
-                initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : (canvasTransform != null ? canvasTransform.lossyScale.x : 1f);
-                // --------------------------------------------------------------------------------
+                // Rimosso il salvataggio di initialContainerScaleX da qui
 
                 OpenIGTLinkConnect igtConnect = FindObjectOfType<OpenIGTLinkConnect>();
                 if (igtConnect != null)

@@ -10,7 +10,7 @@ public class LaserUIManager : MonoBehaviour
     public Transform playerCamera;
     public float spawnDistanceInFront = 0.5f;
 
-    // Aggiungiamo una variabile per ricordare se la sfera è attualmente nascosta
+    // Variabile per ricordare se la sfera è attualmente nascosta
     private bool isSphereHidden = false; 
 
     void Start()
@@ -52,6 +52,32 @@ public class LaserUIManager : MonoBehaviour
             // Se era visibile, la nascondiamo e la blocchiamo
             laserPointer.HideSphere();
             isSphereHidden = true; // Aggiorniamo la memoria
+        }
+    }
+
+    // Collega questo metodo all'evento OnClick del tuo bottone dell'ago ("Needle")
+    public void OnToggleNeedleClicked()
+    {
+        if (laserPointer == null || playerCamera == null) return;
+
+        // Se il sistema è attualmente SPENTO, lo accendiamo e lo posizioniamo
+        if (!laserPointer.gameObject.activeSelf)
+        {
+            // 1. Attiviamo l'oggetto
+            laserPointer.gameObject.SetActive(true);
+            
+            // 2. Riposizioniamo il sistema davanti agli occhi (stessa logica dello spawn)
+            laserPointer.transform.position = playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
+            laserPointer.transform.rotation = Quaternion.LookRotation(playerCamera.forward);
+            
+            // 3. Ci assicuriamo che la sfera sia visibile e lo stato resettato
+            laserPointer.ShowSphere();
+            isSphereHidden = false;
+        }
+        else
+        {
+            // Se il sistema è attualmente ACCESO, lo spegniamo semplicemente
+            laserPointer.gameObject.SetActive(false);
         }
     }
 }
