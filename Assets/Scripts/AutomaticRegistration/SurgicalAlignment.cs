@@ -6,7 +6,6 @@ using Meta.XR.MRUtilityKit;
 
 public class SurgicalAlignment : MonoBehaviour
 {
-    // --- SINGLETON ---
     public static SurgicalAlignment Instance { get; private set; }
 
     public const string ScenePermission = OVRPermissionsRequester.ScenePermission;
@@ -21,7 +20,8 @@ public class SurgicalAlignment : MonoBehaviour
 
     public static bool TrackingEnabled
     {
-        get => Instance && Instance._mrukInstance && Instance._mrukInstance.SceneSettings.TrackerConfiguration.QRCodeTrackingEnabled;
+        get => Instance && Instance._mrukInstance &&
+               Instance._mrukInstance.SceneSettings.TrackerConfiguration.QRCodeTrackingEnabled;
         set
         {
             if (!Instance || !Instance._mrukInstance) return;
@@ -36,85 +36,173 @@ public class SurgicalAlignment : MonoBehaviour
     private GameObject _patientHologram;
     private bool _alignmentDone = false;
 
-    // --- LA VERA NOVITÀ ---
-    // Usiamo la STRINGA (il nome del QR) come chiave, e salviamo le POSIZIONI pure, ignorando gli oggetti di Meta.
-    private Dictionary<string, Vector3> detectedQRsPos = new Dictionary<string, Vector3>();
-    private Dictionary<string, GameObject> debugVisuals = new Dictionary<string, GameObject>();
+    private readonly Dictionary<string, MRUKTrackable> _detectedQRs = new();
+    private readonly Dictionary<string, GameObject>    _debugVisuals = new();
 
-    private static readonly Color[] QR_COLORS = { Color.green, Color.cyan, Color.yellow, Color.magenta };
+    // Cache dei trackable noti a MRUK: aggiornata SOLO dagli eventi, mai da Find
+    private readonly HashSet<MRUKTrackable> _knownTrackables = new();
 
+    private static readonly Color[] QR_COLORS =
+        { Color.green, Color.cyan, Color.yellow, Color.magenta };
+
+    // Coroutine di recovery: parte solo se mancano QR, si ferma quando li ha tutti
+    private Coroutine _recoveryCoroutine;
+
+    // ---------------------------------------------------------------
     private void Awake()
     {
         if (Instance == null) Instance = this;
-        else Destroy(gameObject);
+        else { Destroy(gameObject); return; }
     }
 
     void OnValidate()
     {
-        if (!_mrukInstance && FindAnyObjectByType<MRUK>() is { } mruk && mruk.gameObject.scene == gameObject.scene)
+        if (!_mrukInstance &&
+            FindAnyObjectByType<MRUK>() is { } mruk &&
+            mruk.gameObject.scene == gameObject.scene)
             _mrukInstance = mruk;
     }
 
     void Start()
     {
-        if (!_mrukInstance)       { Debug.LogError("ERROR: MRUK not found."); return; }
-        if (!IsSupported)         { Debug.LogError("ERROR: QR Code tracking not supported."); return; }
-        if (!HasPermissions)      { Debug.LogWarning("Scene permission not granted."); return; }
-        if (!TrackingEnabled)     { Debug.LogWarning("QR Code tracking not enabled."); return; }
+        if (!_mrukInstance)   { Debug.LogError("[SA] MRUK not found.");           return; }
+        if (!IsSupported)     { Debug.LogError("[SA] QR tracking not supported."); return; }
+        if (!HasPermissions)  { Debug.LogWarning("[SA] Permission not granted.");  return; }
+        if (!TrackingEnabled) { Debug.LogWarning("[SA] QR tracking not enabled."); return; }
 
-        ScanExistingTrackables();
+        // Aggancia eventi MRUK — unica fonte di verità
         _mrukInstance.SceneSettings.TrackableAdded.AddListener(OnTrackableAdded);
         _mrukInstance.SceneSettings.TrackableRemoved.AddListener(OnTrackableRemoved);
 
-        Debug.Log("SurgicalAlignment: QR Code tracking initialized.");
-        StartCoroutine(ScanExistingTrackablesDelayed());
+        // Scansione iniziale UNA SOLA VOLTA (sincrona, non in loop)
+        // Necessaria solo per i trackable già presenti prima di Start()
+        ScanExistingTrackablesOnce();
+
+        Debug.Log("[SA] QR Code tracking initialized.");
     }
 
-    private IEnumerator ScanExistingTrackablesDelayed()
-    {
-        yield return new WaitForSeconds(0.5f);
-        MRUKTrackable[] existing = FindObjectsByType<MRUKTrackable>(FindObjectsSortMode.None);
-        foreach (var trackable in existing)
-        {
-            if (trackable.TrackableType == OVRAnchor.TrackableType.QRCode)
-                OnTrackableAdded(trackable);
-        }
-    }
-
-    private void ScanExistingTrackables()
+    // Eseguita una sola volta all'avvio — non in loop, non in Update
+    private void ScanExistingTrackablesOnce()
     {
         MRUKTrackable[] existing = FindObjectsByType<MRUKTrackable>(FindObjectsSortMode.None);
-        foreach (var trackable in existing)
+        foreach (var t in existing)
         {
-            if (trackable.TrackableType == OVRAnchor.TrackableType.QRCode)
-                OnTrackableAdded(trackable);
-        }
-    }
-
-    void Update()
-    {
-        if (Camera.main == null) return;
-
-        foreach (var visual in debugVisuals.Values)
-        {
-            if (visual == null) continue;
-
-            Vector3 screenPoint = Camera.main.WorldToViewportPoint(visual.transform.position);
-            bool isVisible = screenPoint.z > 0
-                          && screenPoint.x >= 0 && screenPoint.x <= 1
-                          && screenPoint.y >= 0 && screenPoint.y <= 1;
-
-            if (visual.transform.childCount > 0)
+            if (t.TrackableType == OVRAnchor.TrackableType.QRCode)
             {
-                GameObject graphicsRoot = visual.transform.GetChild(0).gameObject;
-                if (graphicsRoot.activeSelf != isVisible)
-                    graphicsRoot.SetActive(isVisible);
+                _knownTrackables.Add(t);
+                RegisterOrUpdateTrackable(t);
             }
         }
+
+        // Se dopo la scansione iniziale mancano ancora QR, avvia il recovery
+        if (!_alignmentDone && _detectedQRs.Count < 4)
+            StartRecovery();
     }
 
+    // ---------------------------------------------------------------
+    // RECOVERY: usa i trackable già in cache (_knownTrackables),
+    // NON chiama FindObjectsByType. Intervallo lungo (2s) perché
+    // serve solo per QR che escono/rientrano nel FOV.
+    // ---------------------------------------------------------------
+    private void StartRecovery()
+    {
+        if (_recoveryCoroutine != null) return; // già in esecuzione
+        _recoveryCoroutine = StartCoroutine(RecoveryCoroutine());
+    }
+
+    private void StopRecovery()
+    {
+        if (_recoveryCoroutine == null) return;
+        StopCoroutine(_recoveryCoroutine);
+        _recoveryCoroutine = null;
+    }
+
+    private IEnumerator RecoveryCoroutine()
+    {
+        // Aspetta un po' prima del primo tentativo (MRUK potrebbe essere ancora in init)
+        yield return new WaitForSeconds(1.0f);
+
+        while (!_alignmentDone && _detectedQRs.Count < 4)
+        {
+            // Riprocessa SOLO i trackable già noti — nessun Find, nessun overhead
+            foreach (var t in _knownTrackables)
+            {
+                if (t != null && t.TrackableType == OVRAnchor.TrackableType.QRCode)
+                    RegisterOrUpdateTrackable(t);
+            }
+
+            // Intervallo lungo: il recovery non è urgente, l'utente vedrà i QR
+            yield return new WaitForSeconds(2.0f);
+        }
+
+        _recoveryCoroutine = null;
+        Debug.Log("[SA] Recovery fermato.");
+    }
+
+    // ---------------------------------------------------------------
+    // EVENTI MRUK — chiamati automaticamente, zero overhead
+    // ---------------------------------------------------------------
+    private void OnTrackableAdded(MRUKTrackable trackable)
+    {
+        if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
+
+        _knownTrackables.Add(trackable); // aggiorna la cache
+        RegisterOrUpdateTrackable(trackable);
+    }
+
+    private void OnTrackableRemoved(MRUKTrackable trackable)
+    {
+        if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
+
+        // Non rimuovere dal dizionario principale — la posizione è ancora valida
+        // Avvia recovery nel caso non avessimo ancora 4 QR
+        if (!_alignmentDone && _detectedQRs.Count < 4)
+            StartRecovery();
+
+        Debug.Log($"[SA] QR perso temporaneamente: '{trackable.MarkerPayloadString}'. " +
+                  $"Salvati: {_detectedQRs.Count}/4");
+    }
+
+    // ---------------------------------------------------------------
+    // REGISTRAZIONE — nessun Find, nessun loop pesante
+    // ---------------------------------------------------------------
+    private void RegisterOrUpdateTrackable(MRUKTrackable trackable)
+    {
+        if (_alignmentDone) return;
+
+        string payload = trackable.MarkerPayloadString;
+        if (string.IsNullOrEmpty(payload)) return;
+
+        if (_detectedQRs.ContainsKey(payload))
+        {
+            // Già noto: aggiorna solo il riferimento
+            _detectedQRs[payload] = trackable;
+            return;
+        }
+
+        // QR nuovo
+        int colorIndex = _detectedQRs.Count % QR_COLORS.Length;
+        _detectedQRs.Add(payload, trackable);
+        Debug.Log($"[SA] Nuovo QR: '{payload}' (#{_detectedQRs.Count}/4)");
+
+        GameObject visual = CreateDebugVisual(trackable, payload, QR_COLORS[colorIndex]);
+        _debugVisuals.Add(payload, visual);
+
+        UpdateAllCounterLabels();
+        TryAlign();
+
+        // Abbiamo trovato un nuovo QR: se ora siamo a 4, il recovery si fermerà
+        // da solo al prossimo ciclo. Se no, assicuriamoci che giri.
+        if (_detectedQRs.Count < 4)
+            StartRecovery();
+        else
+            StopRecovery();
+    }
+
+    // ---------------------------------------------------------------
     void OnDestroy()
     {
+        StopRecovery();
         if (_mrukInstance != null)
         {
             _mrukInstance.SceneSettings.TrackableAdded.RemoveListener(OnTrackableAdded);
@@ -142,185 +230,135 @@ public class SurgicalAlignment : MonoBehaviour
 #endif
     }
 
+    // ---------------------------------------------------------------
+    // API PUBBLICA
+    // ---------------------------------------------------------------
     public void SetHologram(GameObject loadedHologram)
     {
         _patientHologram = loadedHologram;
-        VerifyAndAlign();
-    }
-
-    // ---------------------------------------------------------------
-    // TRACKABLE ADDED: Lavoriamo con le Stringhe e le Posizioni pure!
-    // ---------------------------------------------------------------
-    private void OnTrackableAdded(MRUKTrackable trackable)
-    {
-        if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
-
-        string payload = trackable.MarkerPayloadString;
-        if (string.IsNullOrEmpty(payload)) return;
-
-        Vector3 currentPos = trackable.transform.position;
-        Quaternion currentRot = trackable.transform.rotation;
-
-        // Se l'abbiamo già visto, aggiorniamo solo la sua posizione nello spazio
-        if (detectedQRsPos.ContainsKey(payload))
-        {
-            detectedQRsPos[payload] = currentPos;
-            if (debugVisuals.ContainsKey(payload))
-            {
-                debugVisuals[payload].transform.position = currentPos;
-                debugVisuals[payload].transform.rotation = currentRot;
-            }
-            Debug.Log($"[QR] Aggiornato Posizione: '{payload}'. Totale: {detectedQRsPos.Count}/4");
-            VerifyAndAlign();
-            return;
-        }
-
-        // È un QR nuovo (o almeno una stringa nuova)
-        detectedQRsPos.Add(payload, currentPos);
-        int colorIndex = (detectedQRsPos.Count - 1) % QR_COLORS.Length;
-        Debug.Log($"[QR] Nuovo: '{payload}' (#{detectedQRsPos.Count}/4)");
-
-        // Creiamo la grafica SGANCIATA dall'oggetto di Meta
-        GameObject visual = CreateIndependentVisual(trackable, payload, currentPos, currentRot, QR_COLORS[colorIndex]);
-        debugVisuals.Add(payload, visual);
-
-        UpdateAllCounterLabels();
-        VerifyAndAlign();
-    }
-
-    // ---------------------------------------------------------------
-    // TRACKABLE REMOVED
-    // ---------------------------------------------------------------
-    private void OnTrackableRemoved(MRUKTrackable trackable)
-    {
-        if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
-        Debug.Log($"[QR] Anchor di Meta riciclato o perso di vista. La nostra posizione salvata è al sicuro.");
+        Debug.Log("[SA] Hologram ricevuto.");
+        TryAlign();
     }
 
     public void ResetAlignment()
     {
+        StopRecovery();
         _alignmentDone = false;
-        foreach (var visual in debugVisuals.Values)
-            if (visual != null) Destroy(visual);
 
-        detectedQRsPos.Clear();
-        debugVisuals.Clear();
-        Debug.Log("[QR] Reset completato. Puoi scansionare di nuovo.");
+        foreach (var v in _debugVisuals.Values)
+            if (v != null) Destroy(v);
+
+        _detectedQRs.Clear();
+        _debugVisuals.Clear();
+        // NON svuotiamo _knownTrackables: li riprocessiamo subito
+        ScanExistingTrackablesOnce();
+        Debug.Log("[SA] Reset completato.");
     }
 
-    private void VerifyAndAlign()
+    // ---------------------------------------------------------------
+    // ALLINEAMENTO
+    // ---------------------------------------------------------------
+    private void TryAlign()
     {
-        if (_alignmentDone || detectedQRsPos.Count < 4) return;
-
+        if (_alignmentDone || _detectedQRs.Count < 4) return;
         if (_patientHologram == null)
         {
-            Debug.Log("[QR] 4 QR trovati! In attesa del modello da AnatomyImporter...");
+            Debug.Log("[SA] 4 QR trovati! Attendo il modello...");
             return;
         }
-
         PerformAlignment();
     }
 
     private void PerformAlignment()
     {
-        Vector3 sumPositions = Vector3.zero;
-        foreach (var pos in detectedQRsPos.Values)
-        {
-            sumPositions += pos;
-        }
+        Vector3 sum = Vector3.zero;
+        foreach (var qr in _detectedQRs.Values)
+            sum += qr.transform.position;
 
-        Vector3 isocenter = sumPositions / detectedQRsPos.Count;
-        _patientHologram.transform.position = isocenter;
+        _patientHologram.transform.position = sum / _detectedQRs.Count;
         _alignmentDone = true;
+        StopRecovery();
 
-        foreach (var visual in debugVisuals.Values)
-            SetVisualColor(visual, Color.white);
+        // Distruggi i visual: non servono più, liberano CPU e draw call
+        foreach (var v in _debugVisuals.Values)
+            if (v != null) Destroy(v);
+        _debugVisuals.Clear();
 
-        Debug.Log($"[QR] ALLINEAMENTO COMPLETATO! Isocentro: {isocenter}");
+        Debug.Log($"[SA] ALLINEAMENTO COMPLETATO! Isocentro: {_patientHologram.transform.position}");
     }
 
+    // ---------------------------------------------------------------
+    // HELPERS
+    // ---------------------------------------------------------------
     private void UpdateAllCounterLabels()
     {
-        foreach (var pair in debugVisuals)
+        foreach (var visual in _debugVisuals.Values)
         {
-            if (pair.Value == null) continue;
-            Transform graphicsRoot = pair.Value.transform.Find("Graphics");
-            if (graphicsRoot == null) continue;
-            Transform counterTransform = graphicsRoot.Find("CounterLabel");
-            if (counterTransform == null) continue;
-
-            TextMesh tm = counterTransform.GetComponent<TextMesh>();
-            if (tm != null) tm.text = $"{detectedQRsPos.Count}/4";
+            if (visual == null) continue;
+            Transform ct = visual.transform.Find("Graphics/CounterLabel");
+            if (ct == null) continue;
+            TextMesh tm = ct.GetComponent<TextMesh>();
+            if (tm != null) tm.text = $"{_detectedQRs.Count}/4";
         }
     }
 
-    private void SetVisualColor(GameObject visual, Color color)
+    // ---------------------------------------------------------------
+    // VISUAL DI DEBUG
+    // ---------------------------------------------------------------
+    private GameObject CreateDebugVisual(MRUKTrackable trackable, string payload, Color color)
     {
-        if (visual == null) return;
-        LineRenderer lr = visual.GetComponentInChildren<LineRenderer>();
-        if (lr != null) { lr.startColor = color; lr.endColor = color; }
-    }
-
-    // ===============================================================
-    // GENERAZIONE GRAFICA (Sganciata e ingrandita)
-    // ===============================================================
-    private GameObject CreateIndependentVisual(MRUKTrackable trackable, string payload, Vector3 pos, Quaternion rot, Color color)
-    {
-        // NON lo imparentiamo al trackable! Lo posizioniamo liberamente nel mondo.
         GameObject container = new GameObject($"Debug_QR_{payload}");
-        container.transform.position = pos;
-        container.transform.rotation = rot;
+        container.transform.SetParent(trackable.transform, false);
 
         GameObject graphicsRoot = new GameObject("Graphics");
         graphicsRoot.transform.SetParent(container.transform, false);
-        graphicsRoot.transform.localRotation = Quaternion.Euler(0, 180, 0); 
+        graphicsRoot.transform.localRotation = Quaternion.Euler(0, 180, 0);
 
-        // Ingrandiamo leggermente del 10% (1.1f) per coprire la "Quiet Zone" bianca
         float width  = (trackable.PlaneRect.HasValue ? trackable.PlaneRect.Value.width  : 0.15f) * 1.1f;
         float height = (trackable.PlaneRect.HasValue ? trackable.PlaneRect.Value.height : 0.15f) * 1.1f;
-        float w = width / 2f;
+        float w = width  / 2f;
         float h = height / 2f;
 
+        // Contorno
         GameObject outlineObj = new GameObject("Outline");
         outlineObj.transform.SetParent(graphicsRoot.transform, false);
-
         LineRenderer lr = outlineObj.AddComponent<LineRenderer>();
-        lr.useWorldSpace  = false;
-        lr.loop           = true;
-        lr.positionCount  = 4;
-        lr.startWidth     = 0.006f;
-        lr.endWidth       = 0.006f;
-        lr.material       = new Material(Shader.Find("Sprites/Default"));
-        lr.startColor     = color;
-        lr.endColor       = color;
+        lr.useWorldSpace = false;
+        lr.loop          = true;
+        lr.positionCount = 4;
+        lr.startWidth    = 0.006f;
+        lr.endWidth      = 0.006f;
+        lr.material      = new Material(Shader.Find("Sprites/Default"));
+        lr.startColor    = color;
+        lr.endColor      = color;
         lr.SetPosition(0, new Vector3(-w, -h, 0));
         lr.SetPosition(1, new Vector3( w, -h, 0));
         lr.SetPosition(2, new Vector3( w,  h, 0));
         lr.SetPosition(3, new Vector3(-w,  h, 0));
 
+        // Label payload
         GameObject textObj = new GameObject("TextInfo");
         textObj.transform.SetParent(graphicsRoot.transform, false);
         textObj.transform.localPosition = new Vector3(0, h + 0.04f, 0);
-        textObj.transform.localScale    = new Vector3(0.005f, 0.005f, 0.005f);
-
+        textObj.transform.localScale    = Vector3.one * 0.005f;
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text      = payload;
         tm.fontSize  = 100;
         tm.anchor    = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
-        tm.color     = color; 
+        tm.color     = color;
 
+        // Contatore
         GameObject counterObj = new GameObject("CounterLabel");
         counterObj.transform.SetParent(graphicsRoot.transform, false);
         counterObj.transform.localPosition = new Vector3(0, -(h + 0.04f), 0);
-        counterObj.transform.localScale    = new Vector3(0.004f, 0.004f, 0.004f);
-
-        TextMesh counterTm = counterObj.AddComponent<TextMesh>();
-        counterTm.text      = $"{detectedQRsPos.Count}/4";
-        counterTm.fontSize  = 100;
-        counterTm.anchor    = TextAnchor.MiddleCenter;
-        counterTm.alignment = TextAlignment.Center;
-        counterTm.color     = Color.white;
+        counterObj.transform.localScale    = Vector3.one * 0.004f;
+        TextMesh ctm = counterObj.AddComponent<TextMesh>();
+        ctm.text      = $"{_detectedQRs.Count}/4";
+        ctm.fontSize  = 100;
+        ctm.anchor    = TextAnchor.MiddleCenter;
+        ctm.alignment = TextAlignment.Center;
+        ctm.color     = Color.white;
 
         return container;
     }

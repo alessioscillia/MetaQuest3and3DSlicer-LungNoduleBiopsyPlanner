@@ -97,7 +97,7 @@ public class AnatomyImporter : MonoBehaviour
             // NON spostare il modello. Lascialo a (0,0,0).
             // In questo modo, l'origine del file GLTF coincide perfettamente con l'origine del Mondo Unity.
             // Qualsiasi coordinata contenuta nel file (che sia -10, -340 o +1000) sarÃ  rispettata.
-            modelContainer.transform.position = new Vector3(0f, 1f, 1f);
+            modelContainer.transform.position = new Vector3(0f, 0f, 0.2f);
             if (AnatomyManager.Instance != null)
             {
                 AnatomyManager.Instance.RegisterImportedModel(modelContainer);

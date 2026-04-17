@@ -297,43 +297,37 @@ void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHead
 
             // --- 5. APPLICAZIONE AI MATERIALI ---
             
-            // PIANO MOBILE (Con Mirroring X)
+            // PIANO MOBILE (Ribaltato su X e Y)
             mediaMaterial.mainTexture = mediaTexture;
-            // Nota: Per il mirroring moltiplichiamo scale X per -1.
-            // L'offset per il mirroring con crop è: (1 + scaleFactor) / 2 se partiamo da sinistra, 
-            // ma con il codice semplificato sopra, invertiamo semplicemente la logica:
             
             if (imageAspect > planeAspect) 
             {
-                // Fix matematico specifico per il Mirroring + Crop
                 float scaleFactor = planeAspect / imageAspect;
-                mediaMaterial.mainTextureScale = new Vector2(-scaleFactor, 1);
-                // Offset corretto per centrare una texture specchiata
-                mediaMaterial.mainTextureOffset = new Vector2((1 + scaleFactor) / 2, 0); 
+                mediaMaterial.mainTextureScale = new Vector2(-scaleFactor, -1);
+                mediaMaterial.mainTextureOffset = new Vector2(1 - offsetUV.x, 1); 
             }
             else
             {
-                mediaMaterial.mainTextureScale = new Vector2(-1, scaleUV.y);
-                mediaMaterial.mainTextureOffset = new Vector2(1, offsetUV.y);
+                mediaMaterial.mainTextureScale = new Vector2(-1, -scaleUV.y);
+                mediaMaterial.mainTextureOffset = new Vector2(1, 1 - offsetUV.y);
             }
 
 
-            // PIANO FISSO (Con Mirroring X - come Moving Plane)
+            // PIANO FISSO (Senza Mirroring)
             if (fixPlaneMaterial != null)
             {
                 fixPlaneMaterial.mainTexture = mediaTexture;
                 
-                // Applica lo stesso specchiamento verticale del moving plane
                 if (imageAspect > planeAspect)
                 {
                     float scaleFactor = planeAspect / imageAspect;
-                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleFactor, -1);
-                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1);
+                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleFactor, 1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 0);
                 }
                 else
                 {
-                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleUV.x, -1);
-                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1);
+                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleUV.x, 1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 0);
                 }
             }
         }
