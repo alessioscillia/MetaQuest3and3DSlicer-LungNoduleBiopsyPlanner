@@ -6,19 +6,18 @@ using Meta.XR.MRUtilityKit;
 
 public class SurgicalAlignment : MonoBehaviour
 {
-    public static SurgicalAlignment Instance { get; private set; }
+    public static SurgicalAlignment Instance { get; private set; } // Definisce un singleton per l'accesso globale
 
-    public const string ScenePermission = OVRPermissionsRequester.ScenePermission;
-    public static bool IsSupported => MRUK.Instance != null;
+    public static bool IsSupported => MRUK.Instance != null; // Verifica se MRUK è presente, indicatore di supporto al tracking QR
 
-    public static bool HasPermissions
+    public static bool HasPermissions // In editor assumiamo sempre i permessi, su Android controlliamo effettivamente
 #if UNITY_EDITOR
         => true;
 #else
         => UnityEngine.Android.Permission.HasUserAuthorizedPermission(ScenePermission);
 #endif
 
-    public static bool TrackingEnabled
+    public static bool TrackingEnabled // Controlla se il tracking QR è abilitato nelle impostazioni di MRUK, e permette di abilitarlo/disabilitarlo
     {
         get => Instance && Instance._mrukInstance &&
                Instance._mrukInstance.SceneSettings.TrackerConfiguration.QRCodeTrackingEnabled;
@@ -31,16 +30,14 @@ public class SurgicalAlignment : MonoBehaviour
         }
     }
 
-    [SerializeField] private MRUK _mrukInstance;
+    [SerializeField] private MRUK _mrukInstance; // Riferimento a MRUK, assegnabile in inspector o trovato automaticamente in Start()
 
-    private GameObject _patientHologram;
-    private bool _alignmentDone = false;
+    private GameObject _patientHologram; 
+    private bool _alignmentDone = false; 
 
-    private readonly Dictionary<string, MRUKTrackable> _detectedQRs = new();
-    private readonly Dictionary<string, GameObject>    _debugVisuals = new();
-
-    // Cache dei trackable noti a MRUK: aggiornata SOLO dagli eventi, mai da Find
-    private readonly HashSet<MRUKTrackable> _knownTrackables = new();
+    private readonly Dictionary<string, MRUKTrackable> _detectedQRs = new(); // Dizionario dei QR rilevati, chiave: payload, valore: trackable. Non rimuoviamo i QR persi, manteniamo la posizione finché non troviamo 4 QR validi.
+    private readonly Dictionary<string, GameObject>    _debugVisuals = new(); // Visual di debug associati a ciascun QR, per mostrare posizione e payload. Riferiti per payload, non rimossi quando un QR è perso, così da mantenere la visual finché non troviamo 4 QR validi.
+    private readonly HashSet<MRUKTrackable> _knownTrackables = new(); // Cache dei trackable QR già visti, evita di contare lo stesso oggetto due volte e permette di fare recovery senza FindObjectsByType.
 
     private static readonly Color[] QR_COLORS =
         { Color.green, Color.cyan, Color.yellow, Color.magenta };
@@ -49,12 +46,14 @@ public class SurgicalAlignment : MonoBehaviour
     private Coroutine _recoveryCoroutine;
 
     // ---------------------------------------------------------------
+    // Si garantisce che ci sia una sola istanza di SurgicalAlignment, accessibile globalmente tramite Instance. Se ne esiste già una, quella nuova si distrugge da sola (Singleton).
     private void Awake()
     {
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
     }
 
+// Se MRUK non è stato assegnato in inspector, prova a trovarlo automaticamente nella stessa scena. Questo permette di evitare l'assegnazione manuale, ma funziona solo se MRUK e SurgicalAlignment sono nella stessa scena.
     void OnValidate()
     {
         if (!_mrukInstance &&
@@ -110,6 +109,7 @@ public class SurgicalAlignment : MonoBehaviour
         _recoveryCoroutine = StartCoroutine(RecoveryCoroutine());
     }
 
+    // Ferma la coroutine di recovery se è in esecuzione. Chiamata quando troviamo un nuovo QR o quando raggiungiamo 4 QR, così da non sprecare risorse.
     private void StopRecovery()
     {
         if (_recoveryCoroutine == null) return;
@@ -117,6 +117,7 @@ public class SurgicalAlignment : MonoBehaviour
         _recoveryCoroutine = null;
     }
 
+    // Coroutine di recovery: nel caso in cui si perdono dei QR Code precedentemente rilevati, viene richiamata questa cororutine che riprocessa SOLO i trackable già noti.
     private IEnumerator RecoveryCoroutine()
     {
         // Aspetta un po' prima del primo tentativo (MRUK potrebbe essere ancora in init)
@@ -165,6 +166,7 @@ public class SurgicalAlignment : MonoBehaviour
 
     // ---------------------------------------------------------------
     // REGISTRAZIONE — nessun Find, nessun loop pesante
+    // Chiamato solo dagli eventi MRUK o dalla coroutine di recovery, quando troviamo un nuovo QR o quando un QR già noto rientra nel FOV. Aggiorna il dizionario dei QR rilevati, crea/aggiorna il visual di debug, aggiorna i contatori, e se ora abbiamo 4 QR tenta l'allineamento.
     // ---------------------------------------------------------------
     private void RegisterOrUpdateTrackable(MRUKTrackable trackable)
     {
@@ -245,18 +247,29 @@ public class SurgicalAlignment : MonoBehaviour
         StopRecovery();
         _alignmentDone = false;
 
+        // Riabilita il tracking per una nuova sessione
+        TrackingEnabled = true;
+
+        // Ri-aggancia i listener (li avevamo rimossi dopo l'allineamento)
+        if (_mrukInstance != null)
+        {
+            _mrukInstance.SceneSettings.TrackableAdded.RemoveListener(OnTrackableAdded);   // evita duplicati
+            _mrukInstance.SceneSettings.TrackableRemoved.RemoveListener(OnTrackableRemoved);
+            _mrukInstance.SceneSettings.TrackableAdded.AddListener(OnTrackableAdded);
+            _mrukInstance.SceneSettings.TrackableRemoved.AddListener(OnTrackableRemoved);
+        }
+
         foreach (var v in _debugVisuals.Values)
             if (v != null) Destroy(v);
 
         _detectedQRs.Clear();
         _debugVisuals.Clear();
-        // NON svuotiamo _knownTrackables: li riprocessiamo subito
         ScanExistingTrackablesOnce();
-        Debug.Log("[SA] Reset completato.");
+        Debug.Log("[SA] Reset completato, QR tracking riabilitato.");
     }
 
     // ---------------------------------------------------------------
-    // ALLINEAMENTO
+    // ALLINEAMENTO: permesso solo se abbiamo 4 QR rilevati e un modello da posizionare.
     // ---------------------------------------------------------------
     private void TryAlign()
     {
@@ -269,17 +282,30 @@ public class SurgicalAlignment : MonoBehaviour
         PerformAlignment();
     }
 
+    // Allinea l'isocentro del paziente al centro dei QR rilevati. Chiamato quando abbiamo 4 QR e un modello da posizionare.
     private void PerformAlignment()
     {
         Vector3 sum = Vector3.zero;
         foreach (var qr in _detectedQRs.Values)
             sum += qr.transform.position;
 
-        _patientHologram.transform.position = sum / _detectedQRs.Count;
+        _patientHologram.transform.position = sum / _detectedQRs.Count; // posiziona l'isocentro al centro dei QR rilevati
         _alignmentDone = true;
         StopRecovery();
 
-        // Distruggi i visual: non servono più, liberano CPU e draw call
+        // Spegne completamente il pipelineQR di MRUK - libera la CPU/GPU del visore
+        TrackingEnabled = false;
+        Debug.Log("[SA] QR tracking disabilitato dopo allineamento.");
+
+        // Rimuovi anche i listener: non servono più
+        if (_mrukInstance != null)
+        {
+            _mrukInstance.SceneSettings.TrackableAdded.RemoveListener(OnTrackableAdded);
+            _mrukInstance.SceneSettings.TrackableRemoved.RemoveListener(OnTrackableRemoved);
+        }
+
+
+        // Distruggi i visual: (quadrati colorati intorno ai QR Code) non servono più, liberano CPU e draw call
         foreach (var v in _debugVisuals.Values)
             if (v != null) Destroy(v);
         _debugVisuals.Clear();
@@ -288,7 +314,7 @@ public class SurgicalAlignment : MonoBehaviour
     }
 
     // ---------------------------------------------------------------
-    // HELPERS
+    // Aggiorna i contatori su tutti i visual di debug, mostrando quanti QR sono attualmente rilevati. Chiamato ogni volta che cambia il numero di QR rilevati.
     // ---------------------------------------------------------------
     private void UpdateAllCounterLabels()
     {
@@ -307,22 +333,33 @@ public class SurgicalAlignment : MonoBehaviour
     // ---------------------------------------------------------------
     private GameObject CreateDebugVisual(MRUKTrackable trackable, string payload, Color color)
     {
-        GameObject container = new GameObject($"Debug_QR_{payload}");
-        container.transform.SetParent(trackable.transform, false);
+        GameObject container = new GameObject($"Debug_QR_{payload}"); // contiene tutti i visual di questo QR, posizionato direttamente sul trackable
+        container.transform.SetParent(trackable.transform, false); // parenta al trackable, così segue posizione e rotazione
 
-        GameObject graphicsRoot = new GameObject("Graphics");
-        graphicsRoot.transform.SetParent(container.transform, false);
-        graphicsRoot.transform.localRotation = Quaternion.Euler(0, 180, 0);
+        GameObject graphicsRoot = new GameObject("Graphics"); 
+        graphicsRoot.transform.SetParent(container.transform, false); // child di container, così eredita la posizione del trackable ma può avere una rotazione fissa (per essere leggibile)
+        graphicsRoot.transform.localRotation = Quaternion.Euler(0, 180, 0); // ruota di 180° per essere leggibile frontalmente (dipende da come MRUK posiziona i trackable, potrebbe essere necessario adattare)
 
-        float width  = (trackable.PlaneRect.HasValue ? trackable.PlaneRect.Value.width  : 0.15f) * 1.1f;
+        // Dimensioni del contorno: se MRUK fornisce le dimensioni fisiche del QR, usale (con un piccolo margine), altrimenti usa un default ragionevole
+        float width  = (trackable.PlaneRect.HasValue ? trackable.PlaneRect.Value.width  : 0.15f) * 1.1f; 
         float height = (trackable.PlaneRect.HasValue ? trackable.PlaneRect.Value.height : 0.15f) * 1.1f;
+        
+        if (trackable.PlaneRect.HasValue)
+        {
+            Debug.Log($"[SA] QR '{payload}': Usate dimensioni REALI ({trackable.PlaneRect.Value.width:F2} x {trackable.PlaneRect.Value.height:F2} m)");
+        }
+        else
+        {
+            Debug.Log($"[SA] QR '{payload}': Dimensioni fisiche rimosse/non rilevate! Forzato DEFAULT 15 cm");
+        }
+
         float w = width  / 2f;
         float h = height / 2f;
 
         // Contorno
         GameObject outlineObj = new GameObject("Outline");
-        outlineObj.transform.SetParent(graphicsRoot.transform, false);
-        LineRenderer lr = outlineObj.AddComponent<LineRenderer>();
+        outlineObj.transform.SetParent(graphicsRoot.transform, false); // child di graphicsRoot, così eredita la posizione e la rotazione del container
+        LineRenderer lr = outlineObj.AddComponent<LineRenderer>(); //
         lr.useWorldSpace = false;
         lr.loop          = true;
         lr.positionCount = 4;
@@ -338,12 +375,12 @@ public class SurgicalAlignment : MonoBehaviour
 
         // Label payload
         GameObject textObj = new GameObject("TextInfo");
-        textObj.transform.SetParent(graphicsRoot.transform, false);
+        textObj.transform.SetParent(graphicsRoot.transform, false); // child di graphicsRoot, così eredita la posizione e la rotazione del container
         textObj.transform.localPosition = new Vector3(0, h + 0.04f, 0);
         textObj.transform.localScale    = Vector3.one * 0.005f;
         TextMesh tm = textObj.AddComponent<TextMesh>();
         tm.text      = payload;
-        tm.fontSize  = 100;
+        tm.fontSize  = 20;
         tm.anchor    = TextAnchor.MiddleCenter;
         tm.alignment = TextAlignment.Center;
         tm.color     = color;
@@ -355,7 +392,7 @@ public class SurgicalAlignment : MonoBehaviour
         counterObj.transform.localScale    = Vector3.one * 0.004f;
         TextMesh ctm = counterObj.AddComponent<TextMesh>();
         ctm.text      = $"{_detectedQRs.Count}/4";
-        ctm.fontSize  = 100;
+        ctm.fontSize  = 20;
         ctm.anchor    = TextAnchor.MiddleCenter;
         ctm.alignment = TextAlignment.Center;
         ctm.color     = Color.white;
