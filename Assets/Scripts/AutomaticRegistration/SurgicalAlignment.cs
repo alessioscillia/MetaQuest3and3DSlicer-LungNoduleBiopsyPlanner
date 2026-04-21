@@ -45,6 +45,9 @@ public class SurgicalAlignment : MonoBehaviour
     // Coroutine di recovery: parte solo se mancano QR, si ferma quando li ha tutti
     private Coroutine _recoveryCoroutine;
 
+    [Header("Debug Nodule")]
+    [SerializeField] private bool _showNoduleDebug = true; // Attiva/Disattiva la sferetta rossa
+
     // ---------------------------------------------------------------
     // Si garantisce che ci sia una sola istanza di SurgicalAlignment, accessibile globalmente tramite Instance. Se ne esiste già una, quella nuova si distrugge da sola (Singleton).
     private void Awake()
@@ -81,6 +84,7 @@ public class SurgicalAlignment : MonoBehaviour
     }
 
     // Eseguita una sola volta all'avvio — non in loop, non in Update
+    // Scansiona l'intera scena per trovare i trackable QR già presenti e li registra. Questo permette di gestire i QR che MRUK rileva subito all'avvio. Dopo questa scansione iniziale, ci affidiamo solo agli eventi MRUK per aggiornamenti, e alla coroutine di recovery se perdiamo dei QR.
     private void ScanExistingTrackablesOnce()
     {
         MRUKTrackable[] existing = FindObjectsByType<MRUKTrackable>(FindObjectsSortMode.None);
@@ -143,6 +147,7 @@ public class SurgicalAlignment : MonoBehaviour
     // ---------------------------------------------------------------
     // EVENTI MRUK — chiamati automaticamente, zero overhead
     // ---------------------------------------------------------------
+    // Quando MRUK rileva un nuovo trackable QR, lo registra o aggiorna la sua posizione se già noto. Aggiorna la cache dei trackable conosciuti, così da poter fare recovery senza FindObjectsByType.
     private void OnTrackableAdded(MRUKTrackable trackable)
     {
         if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
@@ -151,6 +156,7 @@ public class SurgicalAlignment : MonoBehaviour
         RegisterOrUpdateTrackable(trackable);
     }
 
+    // Quando MRUK perde un trackable QR, non lo rimuove dal dizionario dei QR rilevati, così da mantenere la posizione finché non troviamo 4 QR validi. Avvia il recovery se non abbiamo ancora 4 QR, così da tentare di recuperare i QR persi senza aspettare nuovi eventi MRUK.
     private void OnTrackableRemoved(MRUKTrackable trackable)
     {
         if (trackable.TrackableType != OVRAnchor.TrackableType.QRCode) return;
@@ -202,6 +208,7 @@ public class SurgicalAlignment : MonoBehaviour
     }
 
     // ---------------------------------------------------------------
+    // PULIZIA ALLA CHIUSURA — rimuove i listener per evitare errori, ferma la coroutine di recovery se è in esecuzione, e resetta il singleton.
     void OnDestroy()
     {
         StopRecovery();
@@ -235,6 +242,8 @@ public class SurgicalAlignment : MonoBehaviour
     // ---------------------------------------------------------------
     // API PUBBLICA
     // ---------------------------------------------------------------
+
+    // Permette di assegnare il modello del paziente da allineare.
     public void SetHologram(GameObject loadedHologram)
     {
         _patientHologram = loadedHologram;
@@ -242,6 +251,7 @@ public class SurgicalAlignment : MonoBehaviour
         TryAlign();
     }
 
+    // Permette di resettare l'allineamento, tornando allo stato iniziale.
     public void ResetAlignment()
     {
         StopRecovery();
@@ -311,6 +321,8 @@ public class SurgicalAlignment : MonoBehaviour
         _debugVisuals.Clear();
 
         Debug.Log($"[SA] ALLINEAMENTO COMPLETATO! Isocentro: {_patientHologram.transform.position}");
+
+        CalculateNoduleDebug();
     }
 
     // ---------------------------------------------------------------
@@ -398,5 +410,84 @@ public class SurgicalAlignment : MonoBehaviour
         ctm.color     = Color.white;
 
         return container;
+    }
+
+
+    private void CalculateNoduleDebug()
+    {
+        if (_patientHologram == null) return;
+
+        // 1. RICERCA AUTOMATICA DEL NODULO E CALCOLO INVERSO
+        Transform noduleTransform = null;
+        
+        // Cerca tra tutti i renderer figli del modello importato
+        MeshRenderer[] renderers = _patientHologram.GetComponentsInChildren<MeshRenderer>();
+        foreach (MeshRenderer rend in renderers)
+        {
+            if (rend.gameObject.name.ToLowerInvariant().Contains("nodule"))
+            {
+                noduleTransform = rend.transform;
+                break; // Trovato, fermiamo la ricerca
+            }
+        }
+
+        if (noduleTransform != null)
+        {
+            // Prendi la posizione globale
+            Vector3 noduleWorldPos = noduleTransform.position;
+            
+            // Se l'oggetto nodulo ha un MeshFilter, prendiamo il centro esatto della geometria (centroide)
+            MeshFilter mf = noduleTransform.GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null) 
+            {
+                noduleWorldPos = noduleTransform.TransformPoint(mf.sharedMesh.bounds.center);
+            }
+
+            // Calcola la distanza fisica globale in metri (ignorando le scale dei Transform padri)
+            Vector3 worldOffset = noduleWorldPos - _patientHologram.transform.position;
+
+            // Riconverti in coordinate Slicer (millimetri e sistema RAS)
+            // X = Right, Y = Superior, Z = Anterior
+            float slicerR = worldOffset.x * 1000f;
+            float slicerS = worldOffset.y * 1000f;
+            float slicerA = worldOffset.z * 1000f;
+
+            Debug.Log($"[DEBUG NODULO] Trovato automaticamente: '{noduleTransform.name}'");
+            Debug.Log($"[DEBUG NODULO] Offset globale in Unity (m) -> X: {worldOffset.x:F4}, Y: {worldOffset.y:F4}, Z: {worldOffset.z:F4}");
+            Debug.Log($"[DEBUG NODULO] Coordinate stimate Slicer (mm) -> R: {slicerR:F3}, A: {slicerA:F3}, S: {slicerS:F3}");
+        }
+        else
+        {
+            Debug.LogWarning("[DEBUG NODULO] Nessun sub-modello contenente la parola 'nodule' trovato.");
+        }
+
+        // 2. VISUAL DEBUG: Sferetta rossa target basata su 3D Slicer
+        if (_showNoduleDebug)
+        {
+            // Le tue coordinate di Slicer in millimetri
+            float targetR = -58.972f;
+            float targetA = -86.941f;
+            float targetS = -120.000f;
+
+            // Mappatura da Slicer a Unity Offset (in metri):
+            // R = X, S = Y, A = Z
+            Vector3 theoreticalWorldOffset = new Vector3(targetR / 1000f, targetS / 1000f, targetA / 1000f);
+            
+            // Aggiungiamo l'offset calcolato alla posizione globale dell'isocentro
+            Vector3 theoreticalWorldPos = _patientHologram.transform.position + theoreticalWorldOffset;
+
+            // Genera l'indicatore visivo (Sferetta)
+            GameObject debugIndicator = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            Destroy(debugIndicator.GetComponent<Collider>()); // Rimuovi collider
+            debugIndicator.transform.position = theoreticalWorldPos;
+            debugIndicator.transform.localScale = Vector3.one * 0.015f; // Sferetta da 1.5 cm
+            debugIndicator.name = "Isocenter_Theoretical_Target";
+
+            Material mat = new Material(Shader.Find("Standard"));
+            mat.color = Color.red;
+            debugIndicator.GetComponent<Renderer>().material = mat;
+
+            Debug.Log($"[DEBUG NODULO] Sfera rossa generata alla posizione globale target: {theoreticalWorldPos}");
+        }
     }
 }

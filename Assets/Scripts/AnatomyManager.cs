@@ -427,7 +427,7 @@ public class AnatomyManager : MonoBehaviour
                 
                 initialPlaneScale = spawnedFixedPlane.transform.localScale;
 
-                OpenIGTLinkConnect igtConnect = FindObjectOfType<OpenIGTLinkConnect>();
+                OpenIGTLinkConnect igtConnect = FindFirstObjectByType<OpenIGTLinkConnect>();
                 if (igtConnect != null)
                 {
                     Transform fixPlaneTransform = spawnedFixedPlane.transform.Find("FixPlane");

@@ -86,18 +86,34 @@ public class AnatomyImporter : MonoBehaviour
             await gltf.InstantiateMainSceneAsync(modelContainer.transform);
             // 1. Assegna materiali
             AutomateMaterialSetup(modelContainer);
-            // 2. SETUP UNIVERSALE DELLE TRASFORMAZIONI
-            // Scala: se Slicer Ã¨ in mm e Unity in m, serve 0.001.
-            // Tu usi 0.005 probabilmente perchÃ© il modello originale era molto piccolo o per preferenza visiva.
-            // NOTA: Se cambi scala, assicurati che 'OpenIGTLinkConnect' abbia il moltiplicatore inverso corretto.
-            modelContainer.transform.localScale = new Vector3(0.001f, 0.001f, 0.001f);
-            // Rotazione: Corregge l'orientamento (da supino a in piedi)
-            modelContainer.transform.localRotation = Quaternion.Euler(0, 0, 0);
-            // --- PUNTO CRUCIALE PER L'UNIVERSALITÃ€ ---
-            // NON spostare il modello. Lascialo a (0,0,0).
-            // In questo modo, l'origine del file GLTF coincide perfettamente con l'origine del Mondo Unity.
-            // Qualsiasi coordinata contenuta nel file (che sia -10, -340 o +1000) sarÃ  rispettata.
-            modelContainer.transform.position = new Vector3(0f, 0f, 0.2f);
+
+            // --- NUOVO: Nodo intermedio per il flip dell'asse X ---
+            // modelContainer ha scala SEMPRE positiva → GrabFreeTransformer funziona correttamente
+            // FlipNode porta il segno negativo su X → il modello appare specchiato come prima
+            GameObject flipNode = new GameObject("FlipNode");
+            flipNode.transform.SetParent(modelContainer.transform, false);
+            flipNode.transform.localScale    = new Vector3(-1f, 1f, 1f); // solo il flip, nessun'altra scala
+            flipNode.transform.localPosition = Vector3.zero;
+            flipNode.transform.localRotation = Quaternion.identity;
+
+            // Re-parent tutti i figli del container dentro il flipNode
+            // (sono stati creati da InstantiateMainSceneAsync direttamente sotto modelContainer)
+            var children = new System.Collections.Generic.List<Transform>();
+            foreach (Transform child in modelContainer.transform)
+            {
+                if (child.gameObject != flipNode)
+                    children.Add(child);
+            }
+            foreach (var child in children)
+                child.SetParent(flipNode.transform, false);
+            // -----------------------------------------------------
+
+            // Scala POSITIVA sul container — GrabFreeTransformer non vedrà mai valori negativi
+            modelContainer.transform.localScale    = new Vector3(0.001f, 0.001f, 0.001f);
+            modelContainer.transform.localRotation = Quaternion.identity;
+            modelContainer.transform.position      = new Vector3(0f, -1f, 0f);
+
+            
             if (AnatomyManager.Instance != null)
             {
                 AnatomyManager.Instance.RegisterImportedModel(modelContainer);
