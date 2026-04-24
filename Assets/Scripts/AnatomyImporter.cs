@@ -86,6 +86,7 @@ public class AnatomyImporter : MonoBehaviour
             await gltf.InstantiateMainSceneAsync(modelContainer.transform);
             // 1. Assegna materiali
             AutomateMaterialSetup(modelContainer);
+            
 
             // --- NUOVO: Nodo intermedio per il flip dell'asse X ---
             // modelContainer ha scala SEMPRE positiva → GrabFreeTransformer funziona correttamente
@@ -113,7 +114,7 @@ public class AnatomyImporter : MonoBehaviour
             modelContainer.transform.localRotation = Quaternion.identity;
             modelContainer.transform.position      = new Vector3(0f, -1f, 0f);
 
-            
+
             if (AnatomyManager.Instance != null)
             {
                 AnatomyManager.Instance.RegisterImportedModel(modelContainer);

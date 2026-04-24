@@ -289,23 +289,26 @@ void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHead
 
             // --- 5. APPLICAZIONE AI MATERIALI ---
             
-            // PIANO MOBILE (Ribaltato su X e Y)
+            // PIANO MOBILE
             mediaMaterial.mainTexture = mediaTexture;
             
             if (imageAspect > planeAspect) 
             {
                 float scaleFactor = planeAspect / imageAspect;
-                mediaMaterial.mainTextureScale = new Vector2(-scaleFactor, -1);
-                mediaMaterial.mainTextureOffset = new Vector2(1 - offsetUV.x, 1); 
+                // Prima era X = -scaleFactor. Ora lo facciamo positivo per ribaltare orizzontalmente.
+                // (Manteniamo la Y a -1 se vuoi che rimanga capovolto verticalmente)
+                mediaMaterial.mainTextureScale = new Vector2(scaleFactor, -1);
+                mediaMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1); 
             }
             else
             {
-                mediaMaterial.mainTextureScale = new Vector2(-1, -scaleUV.y);
-                mediaMaterial.mainTextureOffset = new Vector2(1, 1 - offsetUV.y);
+                // Prima era X = -1. Ora lo facciamo positivo.
+                mediaMaterial.mainTextureScale = new Vector2(1, -scaleUV.y);
+                mediaMaterial.mainTextureOffset = new Vector2(0, 1 - offsetUV.y);
             }
 
 
-            // PIANO FISSO (Senza Mirroring)
+            // PIANO FISSO
             if (fixPlaneMaterial != null)
             {
                 fixPlaneMaterial.mainTexture = mediaTexture;
@@ -313,13 +316,15 @@ void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHead
                 if (imageAspect > planeAspect)
                 {
                     float scaleFactor = planeAspect / imageAspect;
-                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleFactor, 1);
-                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 0);
+                    // Questo non aveva il mirroring prima. Per ribaltarlo orizzontalmente, mettiamo il meno alla X.
+                    fixPlaneMaterial.mainTextureScale = new Vector2(-scaleFactor, 1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(1 - offsetUV.x, 0);
                 }
                 else
                 {
-                    fixPlaneMaterial.mainTextureScale = new Vector2(scaleUV.x, 1);
-                    fixPlaneMaterial.mainTextureOffset = new Vector2(offsetUV.x, 0);
+                    // Ribaltiamo l'asse X mettendolo a -1.
+                    fixPlaneMaterial.mainTextureScale = new Vector2(-1, 1);
+                    fixPlaneMaterial.mainTextureOffset = new Vector2(1, 0);
                 }
             }
         }

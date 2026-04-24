@@ -63,6 +63,17 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Slider bonesOpacitySlider;
     [SerializeField] private Slider awVesselsOpacitySlider;
 
+    [Header("Button Visual States")]
+    [Tooltip("Trascina qui i componenti Image dei rispettivi tasti")]
+    [SerializeField] private Image modifyModelImage;
+    [SerializeField] private Image fixModelImage;
+    [SerializeField] private Image needleImage;
+
+    [Tooltip("Colore dell'interno del tasto quando NON è selezionato")]
+    [SerializeField] private Color normalButtonColor = new Color(0f, 0f, 0f, 0f); // Trasparente
+    [Tooltip("Colore dell'interno del tasto quando E' selezionato")]
+    [SerializeField] private Color selectedButtonColor = new Color(1f, 1f, 1f, 0.3f); // Bianco semitrasparente
+
     [Header("Opacity State")]
     [Range(0f, 1f)] [SerializeField] private float skinOpacity = 1f;
     [Range(0f, 1f)] [SerializeField] private float lungOpacity = 1f;
@@ -365,8 +376,30 @@ public class AnatomyManager : MonoBehaviour
     
     public void ToggleNodule(bool isVisible) { if (noduleRenderer) noduleRenderer.enabled = isVisible; }
     
-    public void ModifyModel() { if (EnsureModelRayGrabInteraction()) { modelRayGrabInteractionInstance.SetActive(true); Debug.Log("[AnatomyManager] Modify Model: interazione attiva."); } }
-    public void FixModel() { if (modelRayGrabInteractionInstance != null) { modelRayGrabInteractionInstance.SetActive(false); } Debug.Log("[AnatomyManager] Fix Model: modello bloccato."); }
+    public void ModifyModel() 
+    { 
+        if (EnsureModelRayGrabInteraction()) 
+        { 
+            modelRayGrabInteractionInstance.SetActive(true); 
+            Debug.Log("[AnatomyManager] Modify Model: interazione attiva.");
+            
+            // Aggiorna l'UI
+            SetButtonVisualState(modifyModelImage, true);
+            SetButtonVisualState(fixModelImage, false);
+        }
+    }
+    public void FixModel() 
+    { 
+        if (modelRayGrabInteractionInstance != null) 
+        { 
+            modelRayGrabInteractionInstance.SetActive(false); 
+        } 
+        Debug.Log("[AnatomyManager] Fix Model: modello bloccato."); 
+        
+        // Aggiorna l'UI
+        SetButtonVisualState(modifyModelImage, false);
+        SetButtonVisualState(fixModelImage, true);
+    }
     
     public void ToggleTool(bool isVisible)
     {
@@ -411,6 +444,7 @@ public class AnatomyManager : MonoBehaviour
             }
         }
         if (needlePathToggleText) needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
+    
     }
 
     public void ToggleSliceSystem(bool isActive)
@@ -531,4 +565,29 @@ public class AnatomyManager : MonoBehaviour
     
     private void ConfigureColliderSurface(ColliderSurface colliderSurface, Collider modelCollider) { if (colliderSurface == null) return; colliderSurface.InjectCollider(modelCollider); }
     private void ConfigureRayInteractable(RayInteractable rayInteractable, Grabbable pointableElement, ColliderSurface surface, MoveFromTargetProvider movementProvider) { if (rayInteractable == null) return; if (surface != null) rayInteractable.InjectSurface(surface); if (pointableElement != null) rayInteractable.InjectOptionalPointableElement(pointableElement); if (movementProvider != null) rayInteractable.InjectOptionalMovementProvider(movementProvider); }
+
+    private void SetButtonVisualState(Image buttonImage, bool isActive)
+    {
+        if (buttonImage != null)
+        {
+            buttonImage.color = isActive ? selectedButtonColor : normalButtonColor;
+        }
+    }
+    // --- SURGICAL ALIGNMENT CONTROLS ---
+    /// <summary>
+    /// Chiama questo metodo da un bottone per resettare e far ripartire
+    /// la scansione dei QR Code per l'allineamento chirurgico.
+    /// </summary>
+    public void RestartAlignment()
+    {
+        if (SurgicalAlignment.Instance != null)
+        {
+            Debug.Log("[AnatomyManager] Restarting surgical alignment process...");
+            SurgicalAlignment.Instance.StartDelayedReset(5f);
+        }
+        else
+        {
+            Debug.LogWarning("[AnatomyManager] SurgicalAlignment instance not found. Cannot restart alignment.");
+        }
+    }   
 }

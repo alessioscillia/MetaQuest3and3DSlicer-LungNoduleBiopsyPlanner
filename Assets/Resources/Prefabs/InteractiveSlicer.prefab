@@ -143,7 +143,7 @@ Transform:
   m_GameObject: {fileID: 1627883544634291701}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -3.3791099, y: -2.5735774, z: 5.84366}
+  m_LocalPosition: {x: -1.52766, y: -0.96336, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -520,8 +520,8 @@ MonoBehaviour:
   _transferOnSecondSelection: 0
   _addNewPointsToFront: 0
   _forwardElement: {fileID: 0}
-  _oneGrabTransformer: {fileID: 0}
-  _twoGrabTransformer: {fileID: 0}
+  _oneGrabTransformer: {fileID: 5463254866925615551}
+  _twoGrabTransformer: {fileID: 5463254866925615551}
   _targetTransform: {fileID: 1278270994097638416}
   _maxGrabPoints: -1
   _rigidbody: {fileID: 172431601375374872}
