@@ -68,6 +68,9 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Image modifyModelImage;
     [SerializeField] private Image fixModelImage;
     [SerializeField] private Image needleImage;
+    
+    [Tooltip("Immagine di sfondo del tasto di Tracking QR")]
+    [SerializeField] private Image alignmentTrackingImage;
 
     [Tooltip("Colore dell'interno del tasto quando NON è selezionato")]
     [SerializeField] private Color normalButtonColor = new Color(0f, 0f, 0f, 0f); // Trasparente
@@ -98,6 +101,9 @@ public class AnatomyManager : MonoBehaviour
             Transform menuContainer = canvasTransform.parent;
             initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
         }
+        
+        // All'avvio il tracking parte acceso, quindi accendiamo l'UI corrispondente
+        UpdateTrackingButtonVisual(true);
     }
 
     private void Update()
@@ -359,7 +365,7 @@ public class AnatomyManager : MonoBehaviour
             foreach (Renderer rend in totalSegmentatorRenderers) SetOpacity(rend, tsMasterOpacity);
         }
 
-        if (tsToggleText) tsToggleText.text = isVisible ? "TS ON" : "TS OFF";
+        if (tsToggleText) tsToggleText.text = isVisible ? "Total ON" : "Total OFF";
     }
 
     public void ToggleSkin(bool isVisible) { if (skinRenderer) skinRenderer.enabled = isVisible; if (skinToggleText) skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF"; }
@@ -383,7 +389,6 @@ public class AnatomyManager : MonoBehaviour
             modelRayGrabInteractionInstance.SetActive(true); 
             Debug.Log("[AnatomyManager] Modify Model: interazione attiva.");
             
-            // Aggiorna l'UI
             SetButtonVisualState(modifyModelImage, true);
             SetButtonVisualState(fixModelImage, false);
         }
@@ -396,7 +401,6 @@ public class AnatomyManager : MonoBehaviour
         } 
         Debug.Log("[AnatomyManager] Fix Model: modello bloccato."); 
         
-        // Aggiorna l'UI
         SetButtonVisualState(modifyModelImage, false);
         SetButtonVisualState(fixModelImage, true);
     }
@@ -405,46 +409,12 @@ public class AnatomyManager : MonoBehaviour
     {
         if (toolRenderer)
         {
+            // Abilitiamo o disabilitiamo solo la visualizzazione del renderer
             toolRenderer.enabled = isVisible;
-            if (isVisible)
-            {
-                if (activeRayGrabInteraction == null && rayGrabInteractionPrefab != null)
-                {
-                    activeRayGrabInteraction = Instantiate(rayGrabInteractionPrefab, toolRenderer.transform);
-                    activeRayGrabInteraction.transform.localPosition = Vector3.zero;
-                    activeRayGrabInteraction.transform.localRotation = Quaternion.identity;
-
-                    GameObject toolObj = toolRenderer.gameObject;
-                    Collider toolCollider = toolObj.GetComponent<Collider>();
-                    Rigidbody toolRb = EnsureComponent<Rigidbody>(toolObj);
-                    toolRb.useGravity = false;
-                    toolRb.isKinematic = true;
-
-                    Grabbable toolGrabbable = EnsureComponent<Grabbable>(toolObj);
-                    
-                    // --- USA IL PREFAB SE ESISTE, ALTRIMENTI USA QUELLO BASE ---
-                    GrabFreeTransformer activeTransformer;
-                    if (customScaleTransformerPrefab != null)
-                    {
-                        activeTransformer = Instantiate(customScaleTransformerPrefab, toolObj.transform);
-                    }
-                    else
-                    {
-                        activeTransformer = EnsureComponent<GrabFreeTransformer>(toolObj);
-                    }
-
-                    ConfigureGrabbable(toolGrabbable, toolRb, toolObj.transform, activeTransformer, activeTransformer);
-                    WireRayGrabComponents(activeRayGrabInteraction, toolCollider, toolGrabbable);
-                }
-                else if (activeRayGrabInteraction != null) { activeRayGrabInteraction.SetActive(true); }
-            }
-            else
-            {
-                if (activeRayGrabInteraction != null) { activeRayGrabInteraction.SetActive(false); }
-            }
         }
-        if (needlePathToggleText) needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
-    
+        
+        if (needlePathToggleText) 
+            needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
     }
 
     public void ToggleSliceSystem(bool isActive)
@@ -486,10 +456,7 @@ public class AnatomyManager : MonoBehaviour
         Rigidbody modelRigidbody = EnsureModelRigidbody(importedModelRoot);
         Grabbable modelGrabbable = EnsureComponent<Grabbable>(importedModelRoot);
         
-        // --- USA IL PREFAB SE ESISTE, ALTRIMENTI USA QUELLO BASE ---
         GrabFreeTransformer activeTransformer;
-        
-        // Cerca se l'abbiamo già istanziato per non crearne doppi
         GrabFreeTransformer existingTransformer = importedModelRoot.GetComponentInChildren<GrabFreeTransformer>();
         
         if (existingTransformer != null && existingTransformer.gameObject != importedModelRoot)
@@ -573,21 +540,29 @@ public class AnatomyManager : MonoBehaviour
             buttonImage.color = isActive ? selectedButtonColor : normalButtonColor;
         }
     }
+
     // --- SURGICAL ALIGNMENT CONTROLS ---
+    
     /// <summary>
-    /// Chiama questo metodo da un bottone per resettare e far ripartire
-    /// la scansione dei QR Code per l'allineamento chirurgico.
+    /// Ora funziona come un Play/Pause. Chiama questo metodo da un bottone per 
+    /// mettere in pausa o far ripartire il tracking in real-time.
     /// </summary>
     public void RestartAlignment()
     {
         if (SurgicalAlignment.Instance != null)
         {
-            Debug.Log("[AnatomyManager] Restarting surgical alignment process...");
-            SurgicalAlignment.Instance.StartDelayedReset(5f);
+            bool isNowTracking = SurgicalAlignment.Instance.ToggleTracking();
+            UpdateTrackingButtonVisual(isNowTracking);
         }
         else
         {
-            Debug.LogWarning("[AnatomyManager] SurgicalAlignment instance not found. Cannot restart alignment.");
+            Debug.LogWarning("[AnatomyManager] SurgicalAlignment instance non trovata.");
         }
     }   
+
+    // Aggiorna graficamente il colore del tasto
+    public void UpdateTrackingButtonVisual(bool isTracking)
+    {
+        SetButtonVisualState(alignmentTrackingImage, isTracking);
+    }
 }
