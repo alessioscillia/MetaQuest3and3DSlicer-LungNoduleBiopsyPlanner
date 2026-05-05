@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.UI;
 using Oculus.Interaction;
 using Oculus.Interaction.Surfaces;
-// using TMPro; // Rimuovi i commenti se stai usando TextMeshPro
 
 public class AnatomyManager : MonoBehaviour
 {
@@ -68,6 +67,7 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Image modifyModelImage;
     [SerializeField] private Image fixModelImage;
     [SerializeField] private Image needleImage;
+    [SerializeField] private Image fixLaserImage; // Aggiunto dal LaserUIManager
     
     [Tooltip("Immagine di sfondo del tasto di Tracking QR")]
     [SerializeField] private Image alignmentTrackingImage;
@@ -85,6 +85,13 @@ public class AnatomyManager : MonoBehaviour
     [Range(0f, 1f)] [SerializeField] private float tsMasterOpacity = 1f;
 
     private bool isTSVisible;
+
+    [Header("Laser Pointer System")]
+    [SerializeField] private SurgicalLaserPointer laserPointer;
+    [Tooltip("La telecamera principale (l'utente) per fargli spawnare il laser davanti")]
+    [SerializeField] private Transform playerCamera;
+    [SerializeField] private float spawnDistanceInFront = 0.5f;
+    private bool isSphereHidden = false;
     
     private void Awake()
     {
@@ -104,6 +111,14 @@ public class AnatomyManager : MonoBehaviour
         
         // All'avvio il tracking parte acceso, quindi accendiamo l'UI corrispondente
         UpdateTrackingButtonVisual(true);
+
+        // Inizializzazione Laser Pointer
+        if (laserPointer != null)
+        {
+            laserPointer.gameObject.SetActive(false);
+        }
+        SetButtonVisualState(needleImage, false);
+        SetButtonVisualState(fixLaserImage, false);
     }
 
     private void Update()
@@ -393,6 +408,7 @@ public class AnatomyManager : MonoBehaviour
             SetButtonVisualState(fixModelImage, false);
         }
     }
+    
     public void FixModel() 
     { 
         if (modelRayGrabInteractionInstance != null) 
@@ -409,12 +425,9 @@ public class AnatomyManager : MonoBehaviour
     {
         if (toolRenderer)
         {
-            // Abilitiamo o disabilitiamo solo la visualizzazione del renderer
             toolRenderer.enabled = isVisible;
         }
-        
-        if (needlePathToggleText) 
-            needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
+        if (needlePathToggleText) needlePathToggleText.text = isVisible ? "Needle Path ON" : "Needle Path OFF";
     }
 
     public void ToggleSliceSystem(bool isActive)
@@ -543,10 +556,6 @@ public class AnatomyManager : MonoBehaviour
 
     // --- SURGICAL ALIGNMENT CONTROLS ---
     
-    /// <summary>
-    /// Ora funziona come un Play/Pause. Chiama questo metodo da un bottone per 
-    /// mettere in pausa o far ripartire il tracking in real-time.
-    /// </summary>
     public void RestartAlignment()
     {
         if (SurgicalAlignment.Instance != null)
@@ -560,9 +569,65 @@ public class AnatomyManager : MonoBehaviour
         }
     }   
 
-    // Aggiorna graficamente il colore del tasto
     public void UpdateTrackingButtonVisual(bool isTracking)
     {
         SetButtonVisualState(alignmentTrackingImage, isTracking);
+    }
+
+    // --- LASER POINTER CONTROLS ---
+
+    public void OnSpawnLaserClicked()
+    {
+        if (laserPointer == null || playerCamera == null) return;
+
+        laserPointer.gameObject.SetActive(true);
+        laserPointer.ShowSphere(); 
+        
+        isSphereHidden = false; 
+
+        laserPointer.transform.position = playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
+        laserPointer.transform.rotation = Quaternion.LookRotation(playerCamera.forward);
+
+        SetButtonVisualState(needleImage, true);
+    }
+
+    public void OnToggleFixLaserClicked()
+    {
+        if (laserPointer == null) return;
+
+        if (isSphereHidden)
+        {
+            laserPointer.ShowSphere();
+            isSphereHidden = false; 
+        }
+        else
+        {
+            laserPointer.HideSphere();
+            isSphereHidden = true; 
+        }
+    }
+
+    public void OnToggleNeedleClicked()
+    {
+        if (laserPointer == null || playerCamera == null) return;
+
+        if (!laserPointer.gameObject.activeSelf)
+        {
+            laserPointer.gameObject.SetActive(true);
+            
+            laserPointer.transform.position = playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
+            laserPointer.transform.rotation = Quaternion.LookRotation(playerCamera.forward);
+            
+            laserPointer.ShowSphere();
+            isSphereHidden = false;
+
+            SetButtonVisualState(needleImage, true);
+        }
+        else
+        {
+            laserPointer.gameObject.SetActive(false);
+
+            SetButtonVisualState(needleImage, false);
+        }
     }
 }
