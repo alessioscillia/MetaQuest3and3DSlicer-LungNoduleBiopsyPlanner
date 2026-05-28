@@ -115,10 +115,8 @@ public class AnatomyManager : MonoBehaviour
             initialContainerScaleX = menuContainer != null ? menuContainer.lossyScale.x : canvasTransform.lossyScale.x;
         }
         
-        // All'avvio il tracking parte acceso, quindi accendiamo l'UI corrispondente
         UpdateTrackingButtonVisual(true);
 
-        // Inizializzazione Laser Pointer
         if (laserPointer != null)
         {
             laserPointer.gameObject.SetActive(false);
@@ -292,13 +290,24 @@ public class AnatomyManager : MonoBehaviour
     {
         if (rend != null && rend.material != null)
         {
+            Material mat = rend.material;
+            
+            // 1. Applica le configurazioni di blending (già presenti nel tuo codice)
             ConfigureMaterialSurfaceForAlpha(rend, alphaVal); 
 
-            Color color = rend.material.color;
-            color.a = alphaVal;
-            rend.material.color = color;
-            if (rend.material.HasProperty("_BaseColor")) rend.material.SetColor("_BaseColor", color);
-            if (rend.material.HasProperty("_Color")) rend.material.SetColor("_Color", color);
+            // 2. Determina quale nome usa lo shader per il colore base
+            string colorProp = "";
+            if (mat.HasProperty("baseColorFactor")) colorProp = "baseColorFactor"; // Specifico dello shader glTFast!
+            else if (mat.HasProperty("_BaseColor")) colorProp = "_BaseColor";      // Specifico di URP/Lit
+            else if (mat.HasProperty("_Color")) colorProp = "_Color";              // Fallback standard
+
+            // 3. Modifica l'Alpha e riapplica
+            if (colorProp != "")
+            {
+                Color currentColor = mat.GetColor(colorProp);
+                currentColor.a = alphaVal;
+                mat.SetColor(colorProp, currentColor);
+            }
         }
     }
 
@@ -307,6 +316,8 @@ public class AnatomyManager : MonoBehaviour
         Material mat = rend.material;
         if (mat == null) return;
         string lowerName = rend.gameObject.name.ToLower();
+        
+        // Impostazioni standard URP
         if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1.0f);
         if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0.0f);
         mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -314,8 +325,16 @@ public class AnatomyManager : MonoBehaviour
         mat.SetInt("_ZWrite", 0);
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        if (lowerName.Contains("skin") || lowerName.Contains("body")) mat.renderQueue = 3000;
-        else mat.renderQueue = 3001;
+        
+        // FORZATURA PER SHADER GRAPH / glTFast
+        // Questo dice esplicitamente alla pipeline grafica di trattare l'oggetto come trasparente
+        mat.SetOverrideTag("RenderType", "Transparent");
+
+        if (lowerName.Contains("skin") || lowerName.Contains("body")) 
+            mat.renderQueue = 3000;
+        else 
+            mat.renderQueue = 3001;
+            
         mat.SetShaderPassEnabled("ShadowCaster", false);
     }
     
@@ -637,10 +656,7 @@ public class AnatomyManager : MonoBehaviour
             SetButtonVisualState(needleImage, false);
         }
     }
-    /// <summary>
-    /// Chiamato dal tasto UI: abilita/disabilita il tracciamento dello strumento
-    /// e la visualizzazione dell'errore rispetto alla traiettoria.
-    /// </summary>
+
     public void OnToggleDeviationTrackingClicked()
     {
         _isDeviationTrackingActive = !_isDeviationTrackingActive;

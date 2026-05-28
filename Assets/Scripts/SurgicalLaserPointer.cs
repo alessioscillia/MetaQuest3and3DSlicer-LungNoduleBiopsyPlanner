@@ -10,21 +10,20 @@ public class SurgicalLaserPointer : MonoBehaviour
     public float lineWidth = 0.002f;
     public Color normalColor = Color.red;
     public Color targetHitColor = Color.green;
+    
+    [Tooltip("Crea un materiale URP/Unlit nel progetto e trascinalo qui! Non lasciarlo vuoto.")]
+    public Material baseLaserMaterial; 
 
     [Header("Impostazioni Mirino")]
-    public GameObject reticlePrefab; // Il tuo Quad con il materiale mostrato
+    public GameObject reticlePrefab; 
     public float reticleScale = 0.5f;
 
     [Header("Filtri Hit (Livelli Laser)")]
-    [Tooltip("Ostacoli e Noduli (es. Obstacle, Nodule)")]
     public LayerMask hittableLayers;
     
     [Header("Calcolo Distanze")]
-    [Tooltip("Inserisci qui SOLO il layer della pelle")]
     public LayerMask skinLayer;
-    [Tooltip("Inserisci qui SOLO il layer dei polmoni/pleura")]
     public LayerMask pleuraLayer;
-    [Tooltip("Il testo nel Canvas dove verrà mostrata la distanza")]
     public TextMeshProUGUI distanceTextUI; 
 
     private LineRenderer lineRenderer;
@@ -42,10 +41,20 @@ public class SurgicalLaserPointer : MonoBehaviour
         lineRenderer.endWidth = lineWidth;
         lineRenderer.positionCount = 2;
         
-        lineRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
-        lineRenderer.material.color = normalColor;
-        lineRenderer.material.renderQueue = 4000;
-        lineRenderer.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+        // --- FIX SHADER STRIPPING ---
+        if (baseLaserMaterial != null)
+        {
+            // Creiamo un'istanza del materiale assegnato da Inspector, così non modifichiamo l'originale
+            lineRenderer.material = new Material(baseLaserMaterial);
+            lineRenderer.material.color = normalColor;
+            lineRenderer.material.renderQueue = 4000;
+            lineRenderer.material.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+        }
+        else
+        {
+            Debug.LogError("[SurgicalLaserPointer] MANCA IL MATERIALE BASE! Assegnalo nell'Inspector.");
+        }
+        // -----------------------------
 
         // Setup Mirino Principale
         if (reticlePrefab != null)
@@ -54,17 +63,14 @@ public class SurgicalLaserPointer : MonoBehaviour
             reticleInstance.transform.localScale = Vector3.one * reticleScale;
             reticleRenderer = reticleInstance.GetComponentInChildren<Renderer>();
 
-            if (reticleRenderer != null)
+            if (reticleRenderer != null && reticleRenderer.material != null)
             {
-                // Crea un'istanza unica del materiale per non alterare il prefab
                 reticleRenderer.material = new Material(reticleRenderer.material);
                 Material reticleMat = reticleRenderer.material;
                 
-                // --- TRUCCO PER RENDERE IL MIRINO ADERENTE E VISIBILE ---
-                // Il tuo materiale è già Transparent. Dobbiamo solo forzarlo sopra tutto.
-                reticleMat.renderQueue = 4000; // Imposta la coda di rendering su Overlay
-                reticleMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always); // Disattiva il depth test
-                reticleMat.SetInt("_ZWrite", 0); // Non scrive nel depth buffer
+                reticleMat.renderQueue = 4000; 
+                reticleMat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always); 
+                reticleMat.SetInt("_ZWrite", 0); 
             }
         }
         
@@ -77,10 +83,9 @@ public class SurgicalLaserPointer : MonoBehaviour
         Vector3 direction = transform.forward;
         lineRenderer.SetPosition(0, origin);
 
-        // --- NUOVA LOGICA: Il mirino si posiziona sempre sulla pelle se rilevata ---
         bool skinHitDetected = false;
         Vector3 skinHitPoint = origin;
-        Vector3 skinHitNormal = -direction; // Default, se non colpisce
+        Vector3 skinHitNormal = -direction; 
 
         if (Physics.Raycast(origin, direction, out RaycastHit skinHit, maxDistance, skinLayer))
         {
@@ -89,11 +94,8 @@ public class SurgicalLaserPointer : MonoBehaviour
             skinHitNormal = skinHit.normal;
         }
 
-        // Raycast principale (per rilevare il nodulo e le distanze)
         bool hitNodule = false;
-        // Aggiorna skin hit point per il deviation calculator
-        if (skinHitDetected)
-            SkinHitPoint = skinHitPoint;
+        if (skinHitDetected) SkinHitPoint = skinHitPoint;
 
         if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, hittableLayers))
         {
@@ -103,17 +105,16 @@ public class SurgicalLaserPointer : MonoBehaviour
             if (hitName.Contains("nodule"))
             {
                 hitNodule          = true;
-                NoduleHitPoint     = hit.point;           // ← aggiunto
+                NoduleHitPoint     = hit.point;           
                 TrajectoryDefined  = skinHitDetected;
                 
                 if (distanceTextUI != null)
                 {
                     string finalDisplayText = "";
 
-                    // Calcolo della distanza Skin-Nodule (usando il skinHitDetected calcolato sopra)
                     if (skinHitDetected)
                     {
-                        float distSkin = Vector3.Distance(skinHitPoint, hit.point) * 100f; // dovrebbe essere 100, ma usiamo 20 per adattarci al modello 
+                        float distSkin = Vector3.Distance(skinHitPoint, hit.point) * 100f; 
                         finalDisplayText += $"Skin: {distSkin:F1} cm\n";
                     }
                     else
@@ -121,7 +122,6 @@ public class SurgicalLaserPointer : MonoBehaviour
                         finalDisplayText += "Skin: N/A\n";
                     }
 
-                    // --- CALCOLO PLEURA ---
                     if (Physics.Raycast(origin, direction, out RaycastHit pleuraHit, maxDistance, pleuraLayer))
                     {
                         float distPleura = Vector3.Distance(pleuraHit.point, hit.point) * 100f;
@@ -138,38 +138,28 @@ public class SurgicalLaserPointer : MonoBehaviour
         }
         else
         {
-            // Se non colpisce noduli o ostacoli, il raggio va alla massima distanza
             lineRenderer.SetPosition(1, origin + direction * maxDistance);
             TrajectoryDefined = false;
         }
 
-        // Reset del testo se non colpiamo il nodulo
         if (!hitNodule && distanceTextUI != null)
         {
             distanceTextUI.text = "Skin: N/A\nLungs: N/A";
         }
 
-        // --- POSIZIONAMENTO DEL MIRINO ADERENTE ALLA PELLE ---
         if (reticleInstance != null)
         {
             reticleInstance.SetActive(true);
             
             if (skinHitDetected)
             {
-                // 1. OFFSET: Spingiamo il mirino in fuori di 5 millimetri lungo la normale della pelle
-                // Questo impedisce fisicamente alla pelle di coprirlo.
                 float offset = 0.005f; 
                 reticleInstance.transform.position = skinHitPoint + (skinHitNormal * offset);
-
-                // 2. ROTAZIONE: I Quad di Unity hanno la faccia visibile rivolta verso -Z.
-                // Per farlo "guardare verso l'esterno", allineiamo la sua Z verso l'interno della pelle (-skinHitNormal)
                 reticleInstance.transform.rotation = Quaternion.LookRotation(-skinHitNormal);
             }
             else
             {
-                // Se la pelle non è colpita, posiziona il mirino alla massima distanza
                 reticleInstance.transform.position = origin + (direction * maxDistance);
-                // Qui guarda verso chi tiene il laser
                 reticleInstance.transform.rotation = Quaternion.LookRotation(-direction); 
             }
         }
@@ -180,10 +170,23 @@ public class SurgicalLaserPointer : MonoBehaviour
 
     private void SetColor(Color color)
     {
+        // Colore ai vertici della linea
         lineRenderer.startColor = color;
         lineRenderer.endColor = color;
-        lineRenderer.material.color = color;
+        
+        // --- FIX URP COLOR ---
+        // Cambiamo dinamicamente il colore del materiale del raggio laser
+        if (lineRenderer.material != null)
+        {
+            if (lineRenderer.material.HasProperty("_BaseColor"))
+                lineRenderer.material.SetColor("_BaseColor", color);
+            else if (lineRenderer.material.HasProperty("_Color"))
+                lineRenderer.material.SetColor("_Color", color);
+            else
+                lineRenderer.material.color = color; // Fallback
+        }
 
+        // Cambiamo dinamicamente il colore del materiale del mirino
         if (reticleRenderer != null && reticleRenderer.material != null)
         {
             if (reticleRenderer.material.HasProperty("_BaseColor"))

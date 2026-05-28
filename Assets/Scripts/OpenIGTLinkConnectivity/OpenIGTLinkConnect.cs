@@ -57,13 +57,20 @@ public class OpenIGTLinkConnect : MonoBehaviour
         {
             // Nessuna inversione della scala Y
             mediaMaterial = movingPlane.GetComponent<MeshRenderer>().material;
-            mediaTexture = new Texture2D(512, 512, TextureFormat.Alpha8, false);
-            mediaMaterial.mainTexture = mediaTexture;
+                        
+            // Se la texture a colori è già stata creata (dal Fixed Plane), usiamo subito quella
+            if (mediaTexture != null)
+            {
+                mediaMaterial.mainTexture = mediaTexture;
+                // Sicurezza aggiuntiva per URP: forziamo la BaseMap
+                mediaMaterial.SetTexture("_BaseMap", mediaTexture);
+            }
             
             // Forza le impostazioni texture per coprire tutto il piano
             mediaMaterial.mainTextureScale = Vector2.one;
             mediaMaterial.mainTextureOffset = Vector2.zero;
-            
+            mediaMaterial.SetTextureScale("_BaseMap", Vector2.one);
+            mediaMaterial.SetTextureOffset("_BaseMap", Vector2.zero);
         }
     }
 
@@ -200,7 +207,7 @@ public class OpenIGTLinkConnect : MonoBehaviour
     }
 
 //////////////////////////////// INCOMING IMAGE MESSAGE ////////////////////////////////
-void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHeaderInfo)
+    void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHeaderInfo)
     {
         ReadMessageFromServer.ImageInfo iImageInfo = ReadMessageFromServer.ReadImageInfo(iMSGbyteArray, headerSize, iHeaderInfo.extHeaderSize);
         
@@ -291,22 +298,27 @@ void ApplyImageInfo(byte[] iMSGbyteArray, ReadMessageFromServer.HeaderInfo iHead
             
             // PIANO MOBILE
             mediaMaterial.mainTexture = mediaTexture;
+            mediaMaterial.SetTexture("_BaseMap", mediaTexture); // Forzatura URP
             
             if (imageAspect > planeAspect) 
             {
                 float scaleFactor = planeAspect / imageAspect;
-                // Prima era X = -scaleFactor. Ora lo facciamo positivo per ribaltare orizzontalmente.
-                // (Manteniamo la Y a -1 se vuoi che rimanga capovolto verticalmente)
                 mediaMaterial.mainTextureScale = new Vector2(scaleFactor, -1);
                 mediaMaterial.mainTextureOffset = new Vector2(offsetUV.x, 1); 
+                
+                // Forzatura URP per Zoom & Crop
+                mediaMaterial.SetTextureScale("_BaseMap", new Vector2(scaleFactor, -1));
+                mediaMaterial.SetTextureOffset("_BaseMap", new Vector2(offsetUV.x, 1));
             }
             else
             {
-                // Prima era X = -1. Ora lo facciamo positivo.
                 mediaMaterial.mainTextureScale = new Vector2(1, -scaleUV.y);
                 mediaMaterial.mainTextureOffset = new Vector2(0, 1 - offsetUV.y);
+                
+                // Forzatura URP per Zoom & Crop
+                mediaMaterial.SetTextureScale("_BaseMap", new Vector2(1, -scaleUV.y));
+                mediaMaterial.SetTextureOffset("_BaseMap", new Vector2(0, 1 - offsetUV.y));
             }
-
 
             // PIANO FISSO
             if (fixPlaneMaterial != null)
