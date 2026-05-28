@@ -31,6 +31,9 @@ public class SurgicalLaserPointer : MonoBehaviour
     private Grabbable oculusGrabbable;
     private GameObject reticleInstance;
     private Renderer reticleRenderer;
+    public Vector3 SkinHitPoint      { get; private set; }
+    public Vector3 NoduleHitPoint    { get; private set; }
+    public bool    TrajectoryDefined { get; private set; }
 
     void Awake()
     {
@@ -88,15 +91,20 @@ public class SurgicalLaserPointer : MonoBehaviour
 
         // Raycast principale (per rilevare il nodulo e le distanze)
         bool hitNodule = false;
+        // Aggiorna skin hit point per il deviation calculator
+        if (skinHitDetected)
+            SkinHitPoint = skinHitPoint;
+
         if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, hittableLayers))
         {
             lineRenderer.SetPosition(1, hit.point);
-
             string hitName = hit.collider.gameObject.name.ToLowerInvariant();
-            
+
             if (hitName.Contains("nodule"))
             {
-                hitNodule = true;
+                hitNodule          = true;
+                NoduleHitPoint     = hit.point;           // ← aggiunto
+                TrajectoryDefined  = skinHitDetected;
                 
                 if (distanceTextUI != null)
                 {
@@ -132,6 +140,7 @@ public class SurgicalLaserPointer : MonoBehaviour
         {
             // Se non colpisce noduli o ostacoli, il raggio va alla massima distanza
             lineRenderer.SetPosition(1, origin + direction * maxDistance);
+            TrajectoryDefined = false;
         }
 
         // Reset del testo se non colpiamo il nodulo

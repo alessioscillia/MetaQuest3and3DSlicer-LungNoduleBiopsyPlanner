@@ -92,6 +92,12 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Transform playerCamera;
     [SerializeField] private float spawnDistanceInFront = 0.5f;
     private bool isSphereHidden = false;
+
+    [Header("Deviation Tracking")]
+    [SerializeField] private PoseClient poseClient;
+    [SerializeField] private TrajectoryDeviationCalculator deviationCalculator; // solo per UI text opz.
+    [SerializeField] private Image deviationTrackingImage;
+    private bool _isDeviationTrackingActive = false;
     
     private void Awake()
     {
@@ -119,6 +125,7 @@ public class AnatomyManager : MonoBehaviour
         }
         SetButtonVisualState(needleImage, false);
         SetButtonVisualState(fixLaserImage, false);
+        SetButtonVisualState(deviationTrackingImage, false);
     }
 
     private void Update()
@@ -629,5 +636,18 @@ public class AnatomyManager : MonoBehaviour
 
             SetButtonVisualState(needleImage, false);
         }
+    }
+    /// <summary>
+    /// Chiamato dal tasto UI: abilita/disabilita il tracciamento dello strumento
+    /// e la visualizzazione dell'errore rispetto alla traiettoria.
+    /// </summary>
+    public void OnToggleDeviationTrackingClicked()
+    {
+        _isDeviationTrackingActive = !_isDeviationTrackingActive;
+
+        if (poseClient != null)
+            poseClient.SetTrackingEnabled(_isDeviationTrackingActive);
+
+        SetButtonVisualState(deviationTrackingImage, _isDeviationTrackingActive);
     }
 }

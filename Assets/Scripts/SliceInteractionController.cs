@@ -106,7 +106,7 @@ public class SliceInteractionController : MonoBehaviour
         return Mathf.InverseLerp(_minZ, _maxZ, transform.localPosition.z);
     }
 
-    void Update()
+    void LateUpdate()
     {
         if (_constraintsInitialized)
         {

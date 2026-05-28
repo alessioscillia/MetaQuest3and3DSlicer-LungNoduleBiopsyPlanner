@@ -8,6 +8,7 @@ public class SurgicalAlignment : MonoBehaviour
 {
     public static SurgicalAlignment Instance { get; private set; }
     public static bool IsSupported => MRUK.Instance != null;
+    private const string ScenePermission = "com.oculus.permission.USE_SCENE";
 
     public static bool HasPermissions
 #if UNITY_EDITOR

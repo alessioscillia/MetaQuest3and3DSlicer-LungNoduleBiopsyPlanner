@@ -38,6 +38,12 @@ public class AnatomyImporter : MonoBehaviour
         }
 
         isLoadingModel = true;
+        // --- MODIFICA ANTI-CACHE ---
+        // Aggiungiamo i Ticks (il tempo attuale) alla fine dell'URL.
+        // Esempio: http://127.0.0.1:8080/model.glb?t=6384218934...
+        // Il server lo ignorerà, ma Unity lo vedrà come un URL nuovo e NON userà la cache!
+        string noCacheUrl = url + "?t=" + System.DateTime.Now.Ticks;
+        // ---------------------------
         try
         {
             GameObject modelContainer = new GameObject("TotalSegmentatorModel");
@@ -51,7 +57,7 @@ public class AnatomyImporter : MonoBehaviour
                 try
                 {
                     gltf = new GltfImport();
-                    success = await gltf.Load(url);
+                    success = await gltf.Load(noCacheUrl);
                     if (success)
                     {
                         break;
@@ -402,4 +408,3 @@ void AutomateMaterialSetup(GameObject loadedModel)
         }
     }
 }
-
