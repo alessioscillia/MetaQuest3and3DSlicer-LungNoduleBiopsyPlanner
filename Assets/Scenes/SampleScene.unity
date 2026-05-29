@@ -793,7 +793,7 @@ MonoBehaviour:
   sliceSystemInstance: {fileID: 0}
   fixedImagePlanePrefab: {fileID: 6826305203497137091, guid: 2e850812e65b3c044a7fddff061c9e5d, type: 3}
   canvasTransform: {fileID: 133692986}
-  offsetLeft: 1.4
+  offsetLeft: 0.7
   rayGrabInteractionPrefab: {fileID: 3461684424311264183, guid: e82b28eeaf78e06479aff05a5b6fc68d, type: 3}
   modelRayGrabInteractionPrefab: {fileID: 3461684424311264183, guid: e82b28eeaf78e06479aff05a5b6fc68d, type: 3}
   customScaleTransformerPrefab: {fileID: 986892602811458763, guid: 7de4789dd37a48b47ba152dfdb51c944, type: 3}
@@ -813,7 +813,7 @@ MonoBehaviour:
   alignmentTrackingImage: {fileID: 476427106}
   normalButtonColor: {r: 0, g: 0, b: 0, a: 0}
   selectedButtonColor: {r: 1, g: 1, b: 1, a: 0.3}
-  skinOpacity: 1
+  skinOpacity: 0.2
   lungOpacity: 1
   bonesOpacity: 1
   awVesselsOpacity: 1
@@ -922,6 +922,18 @@ PrefabInstance:
     - target: {fileID: 2937465959375017887, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
       propertyPath: m_OnClick.m_PersistentCalls.m_Calls.Array.data[0].m_MethodName
       value: RestartAlignment
+      objectReference: {fileID: 0}
+    - target: {fileID: 3091474111412402742, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 0.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 3091474111412402742, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 0.7
+      objectReference: {fileID: 0}
+    - target: {fileID: 3091474111412402742, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 0.7
       objectReference: {fileID: 0}
     - target: {fileID: 3091474111412402742, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2989,7 +3001,7 @@ MonoBehaviour:
   thresholdYellowCm: 1.5
   errorLineWidth: 0.002
   angleTextColor: {r: 0, g: 1, b: 1, a: 1}
-  deviationTextUI: {fileID: 1780695781}
+  deviationTextUI: {fileID: 0}
   showHUD: 1
 --- !u!4 &1660401728
 Transform:

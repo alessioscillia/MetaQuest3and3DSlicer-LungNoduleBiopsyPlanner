@@ -78,7 +78,7 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Color selectedButtonColor = new Color(1f, 1f, 1f, 0.3f); // Bianco semitrasparente
 
     [Header("Opacity State")]
-    [Range(0f, 1f)] [SerializeField] private float skinOpacity = 1f;
+    [Range(0f, 1f)] [SerializeField] private float skinOpacity = 0.2f;
     [Range(0f, 1f)] [SerializeField] private float lungOpacity = 1f;
     [Range(0f, 1f)] [SerializeField] private float bonesOpacity = 1f;
     [Range(0f, 1f)] [SerializeField] private float awVesselsOpacity = 1f;
@@ -369,6 +369,8 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(bonesRenderer, tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
             SetOpacity(airwaysRenderer, tsMasterOpacity);
+            SetOpacity(arteriesRenderer, tsMasterOpacity);
+            SetOpacity(veinsRenderer, tsMasterOpacity);
         }
 
         foreach (Renderer rend in totalSegmentatorRenderers) SetOpacity(rend, tsMasterOpacity);
@@ -409,15 +411,44 @@ public class AnatomyManager : MonoBehaviour
         if (tsToggleText) tsToggleText.text = isVisible ? "Total ON" : "Total OFF";
     }
 
-    public void ToggleSkin(bool isVisible) { if (skinRenderer) skinRenderer.enabled = isVisible; if (skinToggleText) skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF"; }
-    public void ToggleLungs(bool isVisible) { if (lungRenderer) lungRenderer.enabled = isVisible; if (lungsToggleText) lungsToggleText.text = isVisible ? "Lungs ON" : "Lungs OFF"; }
-    public void ToggleBones(bool isVisible) { if (bonesRenderer) bonesRenderer.enabled = isVisible; if (bonesToggleText) bonesToggleText.text = isVisible ? "Bones ON" : "Bones OFF"; }
+    public void ToggleSkin(bool isVisible) 
+    { 
+        if (skinRenderer) skinRenderer.enabled = isVisible; 
+        if (isVisible) SetOpacity(skinRenderer, skinOpacity); // Forza aggiornamento materiale
+        if (skinToggleText) skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF"; 
+    }
+    
+    public void ToggleLungs(bool isVisible) 
+    { 
+        if (lungRenderer) lungRenderer.enabled = isVisible; 
+        if (isVisible) SetOpacity(lungRenderer, isTSVisible ? tsMasterOpacity : lungOpacity);
+        if (lungsToggleText) lungsToggleText.text = isVisible ? "Lungs ON" : "Lungs OFF"; 
+    }
+    
+    public void ToggleBones(bool isVisible) 
+    { 
+        if (bonesRenderer) bonesRenderer.enabled = isVisible; 
+        if (isVisible) SetOpacity(bonesRenderer, isTSVisible ? tsMasterOpacity : bonesOpacity);
+        if (bonesToggleText) bonesToggleText.text = isVisible ? "Bones ON" : "Bones OFF"; 
+    }
+    
     public void ToggleVessels(bool isVisible) 
     { 
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible; 
         if (arteriesRenderer) arteriesRenderer.enabled = isVisible; 
         if (veinsRenderer) veinsRenderer.enabled = isVisible;       
         if (airwaysRenderer) airwaysRenderer.enabled = isVisible; 
+        
+        // AGGIUNTO: Quando accendi i vasi, applica subito l'opacità e la configurazione corretta
+        if (isVisible)
+        {
+            float effectiveOpacity = isTSVisible ? tsMasterOpacity : awVesselsOpacity;
+            SetOpacity(vesselsRenderer, effectiveOpacity);
+            SetOpacity(arteriesRenderer, effectiveOpacity);
+            SetOpacity(veinsRenderer, effectiveOpacity);
+            SetOpacity(airwaysRenderer, effectiveOpacity);
+        }
+
         if (awVesselsToggleText) awVesselsToggleText.text = isVisible ? "AWVessels ON" : "AWVessels OFF"; 
     }
     

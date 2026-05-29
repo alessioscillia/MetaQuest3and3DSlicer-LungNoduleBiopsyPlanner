@@ -17,6 +17,9 @@ public class OpenIGTLinkConnect : MonoBehaviour
     public string ipString; // IP address of the computer running Slicer
     public int port; // Port of the computer running Slicer
     public bool connectOnStart = true; // Connect automatically on Start
+    ///////// PRE-ALLOCATED BUFFERS FOR IMAGES /////////
+    private byte[] _cachedImData;
+    private byte[] _cachedRGBData;
 
     [Header("Slicer Calibration")]
     [Tooltip("Offset spaziale inviato a Slicer per compensare il crop di TotalSegmentator.")]
@@ -166,6 +169,10 @@ public class OpenIGTLinkConnect : MonoBehaviour
             ////////// READ THE HEADER OF THE INCOMING MESSAGES //////////
             byte[] iMSGbyteArray = socketForUnityAndMetaQuest.Listen(headerSize);
 
+            // SE IL SOCKET RITORNA NULL, SALTA AL PROSSIMO FRAME!
+            if (iMSGbyteArray == null) 
+                continue;
+
 
             if (iMSGbyteArray.Length >= (int)headerSize)
             {
@@ -228,21 +235,29 @@ public class OpenIGTLinkConnect : MonoBehaviour
             if (fixPlane != null)
                 fixPlaneMaterial = fixPlane.GetComponent<MeshRenderer>().material;
 
-            // --- 2. CARICAMENTO PIXEL (Standard) ---
-            byte[] bodyArray_iImData = new byte[iImageInfo.numPixX * iImageInfo.numPixY];
-            byte[] bodyArray_RGB = new byte[iImageInfo.numPixX * iImageInfo.numPixY * 3];
+            // --- 2. CARICAMENTO PIXEL (Non-Allocating) ---
+            int totalPixels = iImageInfo.numPixX * iImageInfo.numPixY;
 
-            Buffer.BlockCopy(iMSGbyteArray, iImageInfo.offsetBeforeImageContent, bodyArray_iImData, 0, bodyArray_iImData.Length);
-
-            for (int i = 0; i < bodyArray_iImData.Length; i++)
+            // Inizializza i buffer SOLO la prima volta o se la risoluzione di Slicer cambia
+            if (_cachedImData == null || _cachedImData.Length != totalPixels)
             {
-                byte pixelVal = bodyArray_iImData[i];
-                bodyArray_RGB[i * 3] = pixelVal;
-                bodyArray_RGB[i * 3 + 1] = pixelVal;
-                bodyArray_RGB[i * 3 + 2] = pixelVal;
+                _cachedImData = new byte[totalPixels];
+                _cachedRGBData = new byte[totalPixels * 3];
             }
 
-            mediaTexture.LoadRawTextureData(bodyArray_RGB);
+            // Copia i dati dal messaggio in arrivo nel buffer pre-esistente
+            Buffer.BlockCopy(iMSGbyteArray, iImageInfo.offsetBeforeImageContent, _cachedImData, 0, totalPixels);
+
+            // Processa i pixel trasformando scala di grigi in RGB
+            for (int i = 0; i < totalPixels; i++)
+            {
+                byte pixelVal = _cachedImData[i];
+                _cachedRGBData[i * 3]     = pixelVal;
+                _cachedRGBData[i * 3 + 1] = pixelVal;
+                _cachedRGBData[i * 3 + 2] = pixelVal;
+            }
+
+            mediaTexture.LoadRawTextureData(_cachedRGBData);
             mediaTexture.Apply();
             
             // --- 3. GESTIONE GEOMETRIA: FORZIAMO IL QUADRATO ---

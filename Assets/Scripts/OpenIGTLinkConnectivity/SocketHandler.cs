@@ -1,50 +1,22 @@
-﻿// Code retrieved from: https://github.com/BIIG-UC3M/IGT-UltrARsound
-/*
-* Code created by Marius Krusen
-* Modified by Niklas Kompe, Johann Engster, Phillip Overloeper
-* Further modified to support Meta Quest 3 connectivity
-*/
-using System;
+﻿using System;
 using System.Text;
 using UnityEngine;
 using System.Collections.Generic;
-
-
 using System.Net.Sockets;
-
-
 
 /// <summary>
 /// The class to communicate with the server socket.
 /// </summary>
 public class SocketHandler
 {
-    // Objects for the tcp communication
-
-    // Implementation with TcpClient
-    /// <summary>
-    /// Tcp client for server communication
-    /// </summary>
     private TcpClient tcpClient;
-
-    /// <summary>
-    /// Stream to receive and send massages
-    /// </summary>
     private NetworkStream clientStream;
 
-    /// <summary>
-    /// Connects socket to server.
-    /// </summary>
-    /// <param name="ip">Server ip</param>
-    /// <param name="port">Server port</param>
-    /// <returns>If socket connection was successfull.</returns>
     public bool Connect(string ip, int port)
     {
         try
         {
-            // Create a TcpClient
             tcpClient = new TcpClient(ip, port);
-            // Create clientStream for further communication
             clientStream = tcpClient.GetStream();
             return true;
         }
@@ -55,55 +27,46 @@ public class SocketHandler
         return false;
     }
 
-
-    /// <summary>
-    /// Method to send strings to the server.
-    /// </summary>
-    /// <param name="msg">Massage to be send.</param>
     public void Send(String msg)
     {
         byte[] msgAsByteArray = Encoding.ASCII.GetBytes(msg);
         Send(msgAsByteArray);
     }
 
-
-    /// <summary>
-    /// Method to send bytes to the server.
-    /// </summary>
-    /// <param name="msg">Massage to be send.</param>
     public void Send(byte[] msg)
     {
-        if (clientStream.CanWrite)
+        if (clientStream != null && clientStream.CanWrite)
         {
             clientStream.Write(msg, 0, msg.Length);
         }
     }
 
-
-    /// <summary>
-    /// Method to receive a byte array from the server.
-    /// </summary>
-    /// <returns>Massage the server has sent.</returns>
     public byte[] Listen(uint msgSize)
     {
-        
-        
-        Byte[] bytes = new Byte[msgSize]; ////////////////////////////////////////////////////////////////// Size of transform message ///////////////////////////
-        List<byte> byteList = new List<byte>();
-        StringBuilder receivedMsg = new StringBuilder();
-        int readBytes = 0;
-
-        while (clientStream.CanRead && clientStream.DataAvailable)
+        // 1. EARLY EXIT: Se non ci sono dati, non allochiamo NULLA. (0 Byte GC Alloc in idle)
+        if (clientStream == null || !clientStream.CanRead || !clientStream.DataAvailable)
         {
-            readBytes = clientStream.Read(bytes, 0, bytes.Length);
-            receivedMsg.AppendFormat("{0}", Encoding.ASCII.GetString(bytes, 0, readBytes));
-            byteList.AddRange(bytes);
+            return null;
         }
 
-        byte[] allBytes = new byte[byteList.Count];
-        allBytes = byteList.ToArray();
-        return allBytes;
+        List<byte> byteList = new List<byte>();
+        
+        // 2. Usiamo un buffer ampio (es. 4KB) invece di leggere a pezzettini di 58 byte
+        byte[] buffer = new byte[4096]; 
+        int readBytes = 0;
 
+        // 3. Rimosso l'inutile e pesantissimo StringBuilder
+        while (clientStream.DataAvailable)
+        {
+            readBytes = clientStream.Read(buffer, 0, buffer.Length);
+            
+            // Copiamo solo i byte effettivamente letti in questo giro
+            byte[] actualBytesRead = new byte[readBytes];
+            Buffer.BlockCopy(buffer, 0, actualBytesRead, 0, readBytes);
+            byteList.AddRange(actualBytesRead);
+        }
+
+        return byteList.ToArray();
     }
 
     public void Disconnect()

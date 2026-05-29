@@ -30,13 +30,20 @@ public class CameraFrameCapture : MonoBehaviour
     // --- Stato interno ---
     private WebCamTexture _webcam;
     private Texture2D     _snapshot;
+    
+    // NUOVO: Buffer pre-allocato per evitare GC Alloc
+    private Color32[]     _pixelBuffer; 
 
-    /// <summary>True quando la camera è attiva e ha prodotto almeno un frame.</summary>
+    /// <summary>
+    /// True quando la camera è attiva e ha prodotto almeno un frame.
+    /// </summary>
     public bool IsReady => _webcam != null
                         && _webcam.isPlaying
                         && _webcam.width > 16;   // evita frame "non inizializzati"
 
-    /// <summary>Risoluzione effettiva dopo l'inizializzazione.</summary>
+    /// <summary>
+    /// Risoluzione effettiva dopo l'inizializzazione.
+    /// </summary>
     public int ActualWidth  => _webcam != null ? _webcam.width  : 0;
     public int ActualHeight => _webcam != null ? _webcam.height : 0;
 
@@ -62,7 +69,9 @@ public class CameraFrameCapture : MonoBehaviour
     }
 
     // -----------------------------------------------------------------------
-    /// <summary>Inizializza e avvia la WebCamTexture.</summary>
+    /// <summary>
+    /// Inizializza e avvia la WebCamTexture.
+    /// </summary>
     public void StartCamera()
     {
         WebCamDevice[] devices = WebCamTexture.devices;
@@ -81,8 +90,8 @@ public class CameraFrameCapture : MonoBehaviour
         string camName = devices[idx].name;
 
         _webcam  = new WebCamTexture(camName, requestedWidth, requestedHeight, requestedFPS);
-        // La Texture2D verrà ridimensionata alla prima cattura
-        _snapshot = new Texture2D(requestedWidth, requestedHeight, TextureFormat.RGB24, false);
+        // Usiamo RGBA32 perché è il formato nativo compatibile con Color32 e GetPixels32
+        _snapshot = new Texture2D(requestedWidth, requestedHeight, TextureFormat.RGBA32, false);
 
         _webcam.Play();
         Debug.Log($"[CameraFrameCapture] Avviata \"{camName}\" | " +
@@ -103,17 +112,22 @@ public class CameraFrameCapture : MonoBehaviour
         int w = _webcam.width;
         int h = _webcam.height;
 
-        // Ridimensiona la texture di snapshot se la risoluzione effettiva è diversa
-        if (_snapshot.width != w || _snapshot.height != h)
+        // Se il buffer non esiste ancora, o se la risoluzione della camera è cambiata
+        if (_pixelBuffer == null || _pixelBuffer.Length != w * h)
         {
-            _snapshot.Reinitialize(w, h, TextureFormat.RGB24, false);
-            Debug.Log($"[CameraFrameCapture] Risoluzione effettiva: {w}×{h}");
+            _pixelBuffer = new Color32[w * h]; // Allocazione fatta UNA SOLA VOLTA
+            _snapshot.Reinitialize(w, h, TextureFormat.RGBA32, false);
+            Debug.Log($"[CameraFrameCapture] Buffer pixel inizializzato/ridimensionato: {w}×{h}");
         }
 
-        // Copia pixel dalla WebCamTexture alla Texture2D e codifica in JPEG
-        _snapshot.SetPixels(_webcam.GetPixels());
+        // COPIA NON-ALLOCANTE: riempie il buffer esistente senza creare nuova memoria
+        _webcam.GetPixels32(_pixelBuffer);
+        
+        // Applica il buffer alla Texture2D
+        _snapshot.SetPixels32(_pixelBuffer);
         _snapshot.Apply();
 
+        // Codifica in JPEG
         return _snapshot.EncodeToJPG(jpegQuality);
     }
 
