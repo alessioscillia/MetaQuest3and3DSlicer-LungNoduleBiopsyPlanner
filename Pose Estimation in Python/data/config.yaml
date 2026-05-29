@@ -1,0 +1,57 @@
+########################################
+#     Settings for pose estimation     #
+#         `python main.py`             #
+########################################
+img_dir_path: 'data/images' # Change this to the dir containing your images
+img_format: '.png' # keep the dot ('.')! change the png to other format if needed
+min_detected_sqnc: 2 # Minimum required: 2. You can change this value, 3 is also a good option.
+min_cntr_area_prcntg: 0.03 #3% of the marker area (reduce value if smaller keypoints are not being detected)
+max_angle_diff_group: 1.5 # max angular difference (in degrees) between two keypoints in the same sequence
+max_angle_diff_label: 35.0 # to classify each blob as a 0 or a 1
+cyl_diameter_mm: 37.2 # WARNING: If changed you need to make a new marker `python main.py --task m`, so that the 3D positions are updated!
+# Note: if you print the marker, to wrap around a cylinder, we also need to take into account the paper's thickness
+#       total_marker_diameter = cyl_diameter_mm + 2 * printing_paper_thickness_mm
+printing_paper_thickness_mm: 0.08 # standard 100 gsm paper
+
+##############################################
+#  HSV ranges for green marker segmentation  #
+#         `python main.py --task a`          #
+##############################################
+# Note: use the command `python main.py --task a` to adjust these values
+# Intuition:
+#   h_min and h_max should be around the green color, usually around 60
+#   s_min -> you can lower this number if the marker has "white" regions due to specular highlights.
+#   v_min -> You can lower this when the marker is in low light conditions.
+h_min: 45
+h_max: 70
+s_min: 15
+v_min: 1
+
+##################################################
+#  Settings for making a new pattern and marker  #
+#          `python main.py --task m`             #
+##################################################
+new_pattern:
+    pattern_size:
+        n_sequences: 16 # number of sequences per pattern (= number of columns). Use a EVEN number for hexagonal grid!
+        sequence_length: 8 # number of features per sequence (should be > 2)
+    sequence_head: 1 # if starts with `1` then it will end with `0`, and vice-versa
+    max_n_random_sequences: 100
+    max_n_iterations_to_optimise_pttrn: 10000
+new_marker:
+    draw_green_bg: true # set to false if you will print on a green paper!
+    use_hexagonal_distribution: true
+    marker_margin_pixels:
+        vertical: 186 # add both on top and bottom
+    feature_size_pixels:
+        vertical:
+            v: 272
+            u: 65
+        horizontal:
+            v: 93
+            u: 160
+    feature_margin_pixels:
+        vertical: 125
+        horizontal: 27.5
+    add_border_top_and_bot: true # to be used as a guide for cutting the printed marker
+    border_thickness_pixels: 10

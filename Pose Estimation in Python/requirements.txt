@@ -1,0 +1,8 @@
+opencv-python
+numpy
+Flask
+PyYAML
+scikit-spatial
+parse
+matplotlib
+natsort
