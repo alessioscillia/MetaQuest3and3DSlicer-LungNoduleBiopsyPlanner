@@ -368,14 +368,13 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             return'''
         
         try:
-            # Import the TotalSegmentator module
-            module_path = "C:/Users/chiar/AppData/Local/slicer.org/Slicer 5.8.0/slicer.org/Extensions-33216/TotalSegmentator/lib/Slicer-5.8/qt-scripted-modules"
-            if module_path not in sys.path:
-                sys.path.append(module_path)
-            
-            import TotalSegmentator
-            Logic = TotalSegmentator.TotalSegmentatorLogic()
-            Logic.logCallback = self.addLog
+            try:
+                import TotalSegmentator
+                Logic = TotalSegmentator.TotalSegmentatorLogic()
+                Logic.logCallback = self.addLog
+            except ImportError:
+                slicer.util.errorDisplay("TotalSegmentator non trovato. Assicurati di aver installato l'estensione tramite l'Extension Manager di Slicer.")
+                return
 
             # Get input volume from selector (avoid reloading and creating duplicates)
             inputVolume = self.ui.inputSelector.currentNode()
@@ -422,14 +421,14 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.updateParameterNodeFromGUI()
         
         try:
-            # Import the TotalSegmentator module
-            module_path = "C:/Users/chiar/AppData/Local/slicer.org/Slicer 5.8.0/slicer.org/Extensions-33216/TotalSegmentator/lib/Slicer-5.8/qt-scripted-modules"
-            if module_path not in sys.path:
-                sys.path.append(module_path)
+            try:
+                import TotalSegmentator
+                Logic = TotalSegmentator.TotalSegmentatorLogic()
+                Logic.logCallback = self.addLog
+            except ImportError:
+                slicer.util.errorDisplay("TotalSegmentator non trovato. Assicurati di aver installato l'estensione tramite l'Extension Manager di Slicer.")
+                return
             
-            import TotalSegmentator
-            Logic = TotalSegmentator.TotalSegmentatorLogic()
-            Logic.logCallback = self.addLog
             # Get input volume
             inputVolume = self.ui.inputSelector.currentNode()
             if not inputVolume:
@@ -498,14 +497,14 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.updateParameterNodeFromGUI()
         
         try:
-            # Import the TotalSegmentator module
-            module_path = "C:/Users/chiar/AppData/Local/slicer.org/Slicer 5.8.0/slicer.org/Extensions-33216/TotalSegmentator/lib/Slicer-5.8/qt-scripted-modules"
-            if module_path not in sys.path:
-                sys.path.append(module_path)
+            try:
+                import TotalSegmentator
+                Logic = TotalSegmentator.TotalSegmentatorLogic()
+                Logic.logCallback = self.addLog
+            except ImportError:
+                slicer.util.errorDisplay("TotalSegmentator non trovato. Assicurati di aver installato l'estensione tramite l'Extension Manager di Slicer.")
+                return
             
-            import TotalSegmentator
-            Logic = TotalSegmentator.TotalSegmentatorLogic()
-            Logic.logCallback = self.addLog
             
             # Get input volume from selector (avoid reloading and creating duplicates)
             inputVolume = self.ui.inputSelector.currentNode()
@@ -552,14 +551,14 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
         self.updateParameterNodeFromGUI()
 
         try:
-            # Add TotalSegmentator module to path if necessary
-            module_path = "C:/Users/chiar/AppData/Local/slicer.org/Slicer 5.8.0/slicer.org/Extensions-33216/TotalSegmentator/lib/Slicer-5.8/qt-scripted-modules"
-            if module_path not in sys.path:
-                sys.path.append(module_path)
-
-            import TotalSegmentator
-            Logic = TotalSegmentator.TotalSegmentatorLogic()
-            Logic.logCallback = self.addLog
+            try:
+                import TotalSegmentator
+                Logic = TotalSegmentator.TotalSegmentatorLogic()
+                Logic.logCallback = self.addLog
+            except ImportError:
+                slicer.util.errorDisplay("TotalSegmentator non trovato. Assicurati di aver installato l'estensione tramite l'Extension Manager di Slicer.")
+                return
+            
 
             # Get input volume from selector (avoid reloading and creating duplicates)
             inputVolume = self.ui.inputSelector.currentNode()
