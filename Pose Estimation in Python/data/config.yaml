@@ -4,11 +4,11 @@
 ########################################
 img_dir_path: 'data/images' # Change this to the dir containing your images
 img_format: '.png' # keep the dot ('.')! change the png to other format if needed
-min_detected_sqnc: 2 # Minimum required: 2. You can change this value, 3 is also a good option.
+min_detected_sqnc: 4 # Minimum required: 2. You can change this value, 3 is also a good option.
 min_cntr_area_prcntg: 0.03 #3% of the marker area (reduce value if smaller keypoints are not being detected)
 max_angle_diff_group: 1.5 # max angular difference (in degrees) between two keypoints in the same sequence
 max_angle_diff_label: 35.0 # to classify each blob as a 0 or a 1
-cyl_diameter_mm: 37.2 # WARNING: If changed you need to make a new marker `python main.py --task m`, so that the 3D positions are updated!
+cyl_diameter_mm: 13.38 # WARNING: If changed you need to make a new marker `python main.py --task m`, so that the 3D positions are updated!
 # Note: if you print the marker, to wrap around a cylinder, we also need to take into account the paper's thickness
 #       total_marker_diameter = cyl_diameter_mm + 2 * printing_paper_thickness_mm
 printing_paper_thickness_mm: 0.08 # standard 100 gsm paper
@@ -22,7 +22,7 @@ printing_paper_thickness_mm: 0.08 # standard 100 gsm paper
 #   h_min and h_max should be around the green color, usually around 60
 #   s_min -> you can lower this number if the marker has "white" regions due to specular highlights.
 #   v_min -> You can lower this when the marker is in low light conditions.
-h_min: 45
+h_min: 40
 h_max: 70
 s_min: 15
 v_min: 1
