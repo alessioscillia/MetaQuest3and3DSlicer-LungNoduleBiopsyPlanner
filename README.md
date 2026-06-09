@@ -37,7 +37,7 @@ Python/Flask server for cylindrical-marker pose estimation. It receives camera f
   - [SlicerOpenIGTLink](https://github.com/openigtlink/OpenIGTLink)
   - [TotalSegmentator](https://github.com/wasserth/TotalSegmentator)
   - Percutaneous Approach Analysis (my code)
-  - [PortPlacement] (https://www.slicer.org/wiki/Documentation/Nightly/Modules/PortPlacement) 
+  - [PortPlacement](https://www.slicer.org/wiki/Documentation/Nightly/Modules/PortPlacement) 
   - Volume Reslice Driver
 - Python packages used by the Slicer module:
   - `numpy`
@@ -73,9 +73,10 @@ The mixed-reality registration uses four QR codes with fixed payloads:
 - Alto Destra
 - Basso Sinistra
 - Basso Destra
+
 The printable QR-code sheet is aviable in docs/assets/qr/registration_qr_codes.pdf
 
 ## Aknowledgments
 This project builds on and adapts code and ideas from:
 - [HoloLens2and3DSlicer-PedicleScrewPlacementPlanning](https://github.com/BSEL-UC3M/HoloLens2and3DSlicer-PedicleScrewPlacementPlanning)
--[dvrk_calib_hand_eye](https://github.com/Cartucho/dvrk_calib_hand_eye/tree/main)
+- [dvrk_calib_hand_eye](https://github.com/Cartucho/dvrk_calib_hand_eye/tree/main)
