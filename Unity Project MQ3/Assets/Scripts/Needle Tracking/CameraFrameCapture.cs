@@ -1,143 +1,210 @@
 using UnityEngine;
+using Unity.Collections;
+using Meta.XR;
 
 /// <summary>
-/// Cattura frame dalla camera passthrough del Quest 3 tramite WebCamTexture
-/// e li espone come array di byte JPEG pronti per essere inviati al server Python.
+/// Cattura frame dalla camera passthrough del Quest 3 usando PassthroughCameraAccess,
+/// invece di WebCamTexture.
 ///
-/// SETUP in Unity:
-///   1. Aggiungi questo script a un GameObject vuoto nella scena.
-///   2. Nel Meta XR Project Setup Tool, assicurati che il permesso CAMERA sia abilitato.
-///   3. In Edit > Project Settings > XR Plug-in Management > Meta XR, abilita
-///      "Passthrough" nelle funzionalità del visore.
-///   4. Imposta cameraIndex = 0 (occhio sinistro) o 1 (occhio destro).
+/// In questo modo immagine, intrinseche, risoluzione e posa fisica della camera
+/// provengono tutte dalla stessa API Meta.
 /// </summary>
 public class CameraFrameCapture : MonoBehaviour
 {
-    [Header("Camera Settings")]
-    [Tooltip("0 = camera sinistra, 1 = camera destra sul Quest 3")]
-    public int cameraIndex = 0;
+    [Header("Meta Passthrough API")]
+    [Tooltip("Trascina qui il GameObject che contiene PassthroughCameraAccess")]
+    public PassthroughCameraAccess metaCameraAccess;
 
-    [Tooltip("Risoluzione richiesta — il device usa la più vicina disponibile")]
-    public int requestedWidth  = 1280;
-    public int requestedHeight = 960;
-    public int requestedFPS    = 30;
-
-    [Header("Output")]
+    [Header("Output JPEG")]
     [Range(1, 100)]
-    [Tooltip("Qualità JPEG (1-100). 80-90 è un buon compromesso qualità/banda.")]
+    [Tooltip("Qualità JPEG. 80-90 è un buon compromesso qualità/banda.")]
     public int jpegQuality = 85;
 
-    // --- Stato interno ---
-    private WebCamTexture _webcam;
-    private Texture2D     _snapshot;
-    
-    // NUOVO: Buffer pre-allocato per evitare GC Alloc
-    private Color32[]     _pixelBuffer; 
-
-    /// <summary>
-    /// True quando la camera è attiva e ha prodotto almeno un frame.
-    /// </summary>
-    public bool IsReady => _webcam != null
-                        && _webcam.isPlaying
-                        && _webcam.width > 16;   // evita frame "non inizializzati"
-
-    /// <summary>
-    /// Risoluzione effettiva dopo l'inizializzazione.
-    /// </summary>
-    public int ActualWidth  => _webcam != null ? _webcam.width  : 0;
-    public int ActualHeight => _webcam != null ? _webcam.height : 0;
-
-    /// <summary>
-    /// Texture live della camera — assegnala a un RawImage per la preview in-headset.
-    /// È null finché StartCamera() non viene chiamato.
-    /// </summary>
-    public WebCamTexture LiveTexture => _webcam;
+    [Header("Debug")]
+    public bool logDebugInfo = true;
 
     // -----------------------------------------------------------------------
-    void Start()
+    // Stato interno
+    // -----------------------------------------------------------------------
+
+    private Texture2D _snapshot;
+
+    /// <summary>
+    /// True quando la camera passthrough Meta è attiva e ha prodotto almeno un frame.
+    /// </summary>
+    public bool IsReady
     {
-        // Verifica permesso camera (Android / Quest)
-#if UNITY_ANDROID && !UNITY_EDITOR
-        if (!UnityEngine.Android.Permission.HasUserAuthorizedPermission(
-                UnityEngine.Android.Permission.Camera))
+        get
         {
-            UnityEngine.Android.Permission.RequestUserPermission(
-                UnityEngine.Android.Permission.Camera);
+            return metaCameraAccess != null
+                && metaCameraAccess.enabled
+                && metaCameraAccess.IsPlaying
+                && metaCameraAccess.CurrentResolution.x > 16
+                && metaCameraAccess.CurrentResolution.y > 16
+                && metaCameraAccess.GetTexture() != null;
         }
-#endif
-        StartCamera();
+    }
+
+    /// <summary>
+    /// Larghezza effettiva del frame camera.
+    /// </summary>
+    public int ActualWidth
+    {
+        get
+        {
+            if (metaCameraAccess == null)
+                return 0;
+
+            return metaCameraAccess.CurrentResolution.x;
+        }
+    }
+
+    /// <summary>
+    /// Altezza effettiva del frame camera.
+    /// </summary>
+    public int ActualHeight
+    {
+        get
+        {
+            if (metaCameraAccess == null)
+                return 0;
+
+            return metaCameraAccess.CurrentResolution.y;
+        }
+    }
+
+    /// <summary>
+    /// Texture live della camera.
+    /// Può essere assegnata a una RawImage per preview.
+    /// </summary>
+    public Texture LiveTexture
+    {
+        get
+        {
+            if (metaCameraAccess == null || !metaCameraAccess.IsPlaying)
+                return null;
+
+            return metaCameraAccess.GetTexture();
+        }
     }
 
     // -----------------------------------------------------------------------
-    /// <summary>
-    /// Inizializza e avvia la WebCamTexture.
-    /// </summary>
-    public void StartCamera()
-    {
-        WebCamDevice[] devices = WebCamTexture.devices;
+    // Unity lifecycle
+    // -----------------------------------------------------------------------
 
-        if (devices.Length == 0)
+    void Start()
+    {
+        if (metaCameraAccess == null)
+            metaCameraAccess = GetComponent<PassthroughCameraAccess>();
+
+        if (metaCameraAccess == null)
         {
-            Debug.LogError("[CameraFrameCapture] Nessuna camera trovata nel sistema.");
+            Debug.LogError(
+                "[CameraFrameCapture] PassthroughCameraAccess non trovato. " +
+                "Assegnalo da Inspector oppure mettilo sullo stesso GameObject."
+            );
             return;
         }
 
-        // Log di tutte le camere disponibili (utile per trovare i nomi corretti)
-        for (int i = 0; i < devices.Length; i++)
-            Debug.Log($"[CameraFrameCapture] Camera {i}: \"{devices[i].name}\"");
-
-        int idx = Mathf.Clamp(cameraIndex, 0, devices.Length - 1);
-        string camName = devices[idx].name;
-
-        _webcam  = new WebCamTexture(camName, requestedWidth, requestedHeight, requestedFPS);
-        // Usiamo RGBA32 perché è il formato nativo compatibile con Color32 e GetPixels32
-        _snapshot = new Texture2D(requestedWidth, requestedHeight, TextureFormat.RGBA32, false);
-
-        _webcam.Play();
-        Debug.Log($"[CameraFrameCapture] Avviata \"{camName}\" | " +
-                  $"richiesta: {requestedWidth}×{requestedHeight} @ {requestedFPS}fps");
+        if (logDebugInfo)
+        {
+            Debug.Log(
+                "[CameraFrameCapture] Uso PassthroughCameraAccess come sorgente frame. " +
+                "Assicurati che CameraPosition sia impostata correttamente su Left o Right."
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
+    // Cattura JPEG
+    // -----------------------------------------------------------------------
+
     /// <summary>
     /// Cattura il frame corrente e lo restituisce come byte array JPEG.
     /// Ritorna null se la camera non è pronta.
-    /// Chiamare dall'esterno solo quando <see cref="IsReady"/> è true.
     /// </summary>
     public byte[] CaptureFrameAsJpeg()
     {
-        if (_webcam == null || !_webcam.isPlaying)
-            return null;
-
-        int w = _webcam.width;
-        int h = _webcam.height;
-
-        // Se il buffer non esiste ancora, o se la risoluzione della camera è cambiata
-        if (_pixelBuffer == null || _pixelBuffer.Length != w * h)
+        if (!IsReady)
         {
-            _pixelBuffer = new Color32[w * h]; // Allocazione fatta UNA SOLA VOLTA
-            _snapshot.Reinitialize(w, h, TextureFormat.RGBA32, false);
-            Debug.Log($"[CameraFrameCapture] Buffer pixel inizializzato/ridimensionato: {w}×{h}");
+            if (logDebugInfo)
+                Debug.LogWarning("[CameraFrameCapture] Camera non pronta: impossibile catturare il frame.");
+
+            return null;
         }
 
-        // COPIA NON-ALLOCANTE: riempie il buffer esistente senza creare nuova memoria
-        _webcam.GetPixels32(_pixelBuffer);
-        
-        // Applica il buffer alla Texture2D
-        _snapshot.SetPixels32(_pixelBuffer);
-        _snapshot.Apply();
+        int w = metaCameraAccess.CurrentResolution.x;
+        int h = metaCameraAccess.CurrentResolution.y;
+        int pixelCount = w * h;
 
-        // Codifica in JPEG
+        if (w <= 0 || h <= 0)
+        {
+            Debug.LogWarning($"[CameraFrameCapture] Risoluzione non valida: {w} x {h}");
+            return null;
+        }
+
+        // Crea o ridimensiona la Texture2D locale usata per codificare il JPEG
+        if (_snapshot == null || _snapshot.width != w || _snapshot.height != h)
+        {
+            if (_snapshot != null)
+                Destroy(_snapshot);
+
+            _snapshot = new Texture2D(w, h, TextureFormat.RGBA32, false);
+
+            if (logDebugInfo)
+            {
+                var intrinsics = metaCameraAccess.Intrinsics;
+
+                Debug.LogWarning(
+                    "[CameraFrameCapture] Snapshot inizializzato\n" +
+                    $"CurrentResolution = {w} x {h}\n" +
+                    $"SensorResolution  = {intrinsics.SensorResolution.x} x {intrinsics.SensorResolution.y}\n" +
+                    $"FocalLength       = ({intrinsics.FocalLength.x}, {intrinsics.FocalLength.y})\n" +
+                    $"PrincipalPoint    = ({intrinsics.PrincipalPoint.x}, {intrinsics.PrincipalPoint.y})"
+                );
+            }
+        }
+
+        /*
+         * GetColors() legge i pixel della camera tramite PassthroughCameraAccess.
+         * È più costoso di usare direttamente una texture GPU, ma per inviare frame
+         * a un server Python a intervalli tipo 0.1 s va bene per ora.
+         */
+        NativeArray<Color32> colors = metaCameraAccess.GetColors();
+
+        if (!colors.IsCreated || colors.Length < pixelCount)
+        {
+            Debug.LogWarning(
+                $"[CameraFrameCapture] Buffer colori non valido. " +
+                $"Length={colors.Length}, atteso almeno={pixelCount}"
+            );
+            return null;
+        }
+
+        /*
+         * In alcune versioni dell'API il buffer può essere più grande del numero
+         * effettivo di pixel. Per sicurezza prendiamo solo i primi w*h pixel.
+         */
+        NativeArray<Color32> pixelData = colors.Length == pixelCount
+            ? colors
+            : colors.GetSubArray(0, pixelCount);
+
+        _snapshot.SetPixelData(pixelData, 0);
+        _snapshot.Apply(false);
+
         return _snapshot.EncodeToJPG(jpegQuality);
     }
 
     // -----------------------------------------------------------------------
+    // Cleanup
+    // -----------------------------------------------------------------------
+
     void OnDestroy()
     {
-        if (_webcam != null && _webcam.isPlaying)
+        if (_snapshot != null)
         {
-            _webcam.Stop();
-            Debug.Log("[CameraFrameCapture] Camera fermata.");
+            Destroy(_snapshot);
+            _snapshot = null;
         }
     }
 }

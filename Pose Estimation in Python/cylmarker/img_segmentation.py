@@ -26,59 +26,117 @@ def get_hsv_lower_and_upper(h_min, h_max, s_min, s_max, v_min, v_max):
     return np.array(lower, np.uint8), np.array(upper, np.uint8)
 
 
-def get_marker_background_hsv(im_hsv, h_min, h_max, s_min, v_min):
-    h_min = h_min
-    h_max = h_max
-    s_min = s_min
+def get_marker_background_hsv(im_hsv, h_min, h_max, s_min, v_min, erode_iterations=1):
     s_max = 255
-    v_min = v_min
     v_max = 255
-    # Get lower and upper values
-    lower, upper = get_hsv_lower_and_upper(h_min, h_max, s_min, s_max, v_min, v_max)
+
+    lower, upper = get_hsv_lower_and_upper(
+        h_min, h_max,
+        s_min, s_max,
+        v_min, v_max
+    )
+
     mask_bg_colour = cv.inRange(im_hsv, lower, upper)
 
-    ## Get largest contour (to avoid returning noise as a potential marker)
-    contours, _hierarchy = cv.findContours(mask_bg_colour, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
-    if len(contours) == 0: # No marker detected
+    contours, _hierarchy = cv.findContours(
+        mask_bg_colour,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_NONE
+    )
+
+    if len(contours) == 0:
         return None, None
-    c = max(contours, key = cv.contourArea)
+
+    c = max(contours, key=cv.contourArea)
+
     mask_marker_bg = np.zeros(mask_bg_colour.shape, np.uint8)
     cv.drawContours(mask_marker_bg, [c], -1, 255, -1)
+
     marker_area = cv.contourArea(c)
 
-    # Erode mask (given that we already have the biggest green contour)
-    kernel = np.ones((3, 3), np.uint8)
-    mask_marker_bg = cv.erode(mask_marker_bg, kernel, iterations = 3)
+    if erode_iterations > 0:
+        kernel = np.ones((3, 3), np.uint8)
+        mask_marker_bg = cv.erode(
+            mask_marker_bg,
+            kernel,
+            iterations=erode_iterations
+        )
 
     return mask_marker_bg, marker_area
 
 def get_marker_background(im_hsv, config_file_data):
-    # Load background HSV data
     h_min = config_file_data['h_min']
     h_max = config_file_data['h_max']
     s_min = config_file_data['s_min']
     v_min = config_file_data['v_min']
-    return get_marker_background_hsv(im_hsv, h_min, h_max, s_min, v_min)
+
+    erode_iterations = config_file_data.get('bg_erode_iterations', 1)
+
+    return get_marker_background_hsv(
+        im_hsv,
+        h_min,
+        h_max,
+        s_min,
+        v_min,
+        erode_iterations
+    )
 
 
 
 def get_marker_foreground(im_hsv, mask_marker_bg, marker_area, config_file_data):
-    min_cntr_area_prcntg = config_file_data['min_cntr_area_prcntg']
-    min_cntr_area = (min_cntr_area_prcntg / 100.) * marker_area
+    min_cntr_area_prcntg = config_file_data.get('min_cntr_area_prcntg', 0.03)
+    min_cntr_area_px = config_file_data.get('min_cntr_area_px', 1.5)
 
-    # We will distinguish the foreground and the background using the V channel
-    #  the intuition is that the darker parts of the marker should correspond to the keypoints
-    th = cv.adaptiveThreshold(im_hsv[:,:,2], 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C,\
-                 cv.THRESH_BINARY_INV, 47, 2) # TODO: 47 is hardcoded
+    min_cntr_area = max(
+        (min_cntr_area_prcntg / 100.0) * marker_area,
+        min_cntr_area_px
+    )
+
+    adaptive_block_size = int(config_file_data.get('adaptive_block_size', 31))
+    adaptive_C = int(config_file_data.get('adaptive_C', 2))
+
+    # adaptiveThreshold richiede block size dispari e >= 3
+    if adaptive_block_size % 2 == 0:
+        adaptive_block_size += 1
+    adaptive_block_size = max(3, adaptive_block_size)
+
+    v_channel = im_hsv[:, :, 2]
+
+    # Leggera sfocatura per ridurre rumore del passthrough
+    v_blur = cv.GaussianBlur(v_channel, (3, 3), 0)
+
+    th = cv.adaptiveThreshold(
+        v_blur,
+        255,
+        cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+        cv.THRESH_BINARY_INV,
+        adaptive_block_size,
+        adaptive_C
+    )
+
     mask_fg_colour = cv.bitwise_and(th, th, mask=mask_marker_bg)
-    #cv.imshow('test', th) # TODO: there seems to be alway a big contour that I could remove
-    #cv.waitKey(0)
 
-    # Filter (remove the ones that are too small)
-    contours, _hierarchy = cv.findContours(mask_fg_colour, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    # Piccola chiusura morfologica opzionale: utile se i keypoint sono spezzati
+    close_iterations = int(config_file_data.get('fg_close_iterations', 0))
+    if close_iterations > 0:
+        kernel = np.ones((3, 3), np.uint8)
+        mask_fg_colour = cv.morphologyEx(
+            mask_fg_colour,
+            cv.MORPH_CLOSE,
+            kernel,
+            iterations=close_iterations
+        )
+
+    contours, _hierarchy = cv.findContours(
+        mask_fg_colour,
+        cv.RETR_EXTERNAL,
+        cv.CHAIN_APPROX_NONE
+    )
+
     for cntr in contours:
-        if cv.contourArea(cntr) < min_cntr_area:
-            mask_fg_colour = cv.drawContours(mask_fg_colour, [cntr], -1, (0, 0, 0), -1)
+        area = cv.contourArea(cntr)
+        if area < min_cntr_area:
+            cv.drawContours(mask_fg_colour, [cntr], -1, 0, -1)
 
     return mask_fg_colour
 

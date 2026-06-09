@@ -2261,13 +2261,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c4b5342268340594c958bd79258db914, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PoseClient
-  cameraPhysicalOffset: {x: 0, y: -0.0577, z: 0}
-  markerLocalOffset: {x: 0, y: -0.01, z: 0.01}
+  cameraPhysicalOffset: {x: 0, y: 0, z: 0}
+  markerLocalOffset: {x: 0, y: 0, z: 0}
   serverIP: 127.0.0.1
   serverPort: 5000
   captureIntervalSeconds: 0.1
   cameraCapture: {fileID: 0}
   logPoseData: 1
+  metaCameraAccess: {fileID: 1494166974}
 --- !u!114 &1096428586
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2280,11 +2281,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0353639202d948f48910d633f00a7422, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraFrameCapture
-  cameraIndex: 1
-  requestedWidth: 1280
-  requestedHeight: 960
-  requestedFPS: 30
+  metaCameraAccess: {fileID: 1494166974}
   jpegQuality: 85
+  logDebugInfo: 1
 --- !u!114 &1096428587
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2300,6 +2299,7 @@ MonoBehaviour:
   serverIP: 127.0.0.1
   serverPort: 5000
   cameraCapture: {fileID: 0}
+  metaCameraAccess: {fileID: 1494166974}
   previewImage: {fileID: 1375737370}
   previewAspect: 1.3333334
 --- !u!114 &1096428588
@@ -2802,6 +2802,74 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5f7201a12d95ffc409449d95f23cf332, type: 3}
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Text
+--- !u!1001 &1494166973
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 1.13739
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.09923
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 1.01415
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7047676844597515174, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7847449403238870662, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+      propertyPath: m_Name
+      value: PassthroughCameraAccessPrefab
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects: []
+    m_AddedGameObjects: []
+    m_AddedComponents: []
+  m_SourcePrefab: {fileID: 100100000, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+--- !u!114 &1494166974 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 1748868316715821956, guid: 739c0e37e14f2f144bc1762c90b3f152, type: 3}
+  m_PrefabInstance: {fileID: 1494166973}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ef9a7893e57c04c0db4114c70954b915, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
 --- !u!1 &1506865644
 GameObject:
   m_ObjectHideFlags: 0
@@ -2997,6 +3065,11 @@ MonoBehaviour:
   laserPointer: {fileID: 666049855}
   poseClient: {fileID: 1096428585}
   tipOffsetLocal: {x: 0, y: 0, z: 0}
+  localToolAxis: {x: 1, y: 0, z: 0}
+  tipOffsetAlongToolAxis: 0
+  forwardSmoothing: 0.65
+  maxForwardJumpDeg: 30
+  rejectForwardSpikes: 1
   thresholdGreenCm: 0.5
   thresholdYellowCm: 1.5
   errorLineWidth: 0.002
@@ -3528,7 +3601,6 @@ SceneRoots:
   - {fileID: 832575519}
   - {fileID: 1272130478}
   - {fileID: 1163806747}
-  - {fileID: 1096428583}
   - {fileID: 773190233}
   - {fileID: 1964602100}
   - {fileID: 629778343}
@@ -3541,3 +3613,5 @@ SceneRoots:
   - {fileID: 1194073847}
   - {fileID: 2041832936}
   - {fileID: 207147544}
+  - {fileID: 1096428583}
+  - {fileID: 1494166973}

@@ -12,6 +12,24 @@ public class TrajectoryDeviationCalculator : MonoBehaviour
 
     [Header("Offset punta ago (spazio locale marker)")]
     public Vector3 tipOffsetLocal = new Vector3(0f, 0f, 0.12f);
+    [Header("Asse longitudinale strumento")]
+    public Vector3 localToolAxis = Vector3.right;
+
+    [Tooltip("Distanza dalla origine marker alla punta, lungo l'asse longitudinale")]
+    public float tipOffsetAlongToolAxis = 0.12f;
+
+    [Header("Filtro asse longitudinale")]
+    [Range(0f, 0.95f)]
+    public float forwardSmoothing = 0.65f;
+
+    [Tooltip("Salta aggiornamenti con cambi angolari improvvisi oltre questa soglia")]
+    public float maxForwardJumpDeg = 30f;
+
+    [Tooltip("Usa il filtro anti-spike solo dopo almeno una posa valida")]
+    public bool rejectForwardSpikes = true;
+
+    private bool _hasStableForward = false;
+    private Vector3 _stableForward = Vector3.forward;
 
     [Header("Soglie colore HUD")]
     public float thresholdGreenCm = 0.5f;
@@ -114,8 +132,37 @@ public class TrajectoryDeviationCalculator : MonoBehaviour
         if (poseClient != null && !poseClient.IsTrackingEnabled) return;
 
         _markerDetected = true;
-        _tipPosition = worldPos + worldRot * tipOffsetLocal;
-        _toolForward = worldRot * Vector3.right; // L'asse longitudinale del tuo strumento
+
+        Vector3 rawForward = (worldRot * localToolAxis.normalized).normalized;
+
+        if (!_hasStableForward)
+        {
+            _stableForward = rawForward;
+            _hasStableForward = true;
+        }
+        else
+        {
+            float jumpDeg = Vector3.Angle(_stableForward, rawForward);
+
+            bool isSpike = rejectForwardSpikes && jumpDeg > maxForwardJumpDeg;
+
+            if (!isSpike)
+            {
+                float t = 1f - forwardSmoothing;
+                _stableForward = Vector3.Slerp(_stableForward, rawForward, t).normalized;
+            }
+            else
+            {
+                Debug.LogWarning(
+                    $"[TrajectoryDeviation] Spike orientamento scartato: jump={jumpDeg:F1}°"
+                );
+            }
+        }
+
+        _toolForward = _stableForward;
+
+        // La punta viene calcolata usando SOLO l'asse longitudinale filtrato
+        _tipPosition = worldPos + _toolForward * tipOffsetAlongToolAxis;
 
         ComputeDeviations();
     }
@@ -123,6 +170,7 @@ public class TrajectoryDeviationCalculator : MonoBehaviour
     void HandleMarkerLost()
     {
         _markerDetected = false;
+        _hasStableForward = false;
         if (_errorLine != null) _errorLine.gameObject.SetActive(false);
         if (_rotationText != null) _rotationText.gameObject.SetActive(false);
         UpdateUI();

@@ -3,8 +3,12 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.Networking;
 using UnityEngine.InputSystem;
+using Meta.XR.MRUtilityKit;
+using Meta.XR; // Per accedere a PassthroughCameraAccess
+
 
 [Serializable]
+
 public class PoseResponse
 {
     public bool   detected;
@@ -20,7 +24,7 @@ public class PoseClient : MonoBehaviour
 {
     [Header("Compensazione Lente Fisica (Metri)")]
     [Tooltip("Offset locale tra l'occhio virtuale e la telecamera fisica del Quest 3. X=Destra, Y=Alto, Z=Avanti")]
-    public Vector3 cameraPhysicalOffset = new Vector3(0f, -0.04f, 0.04f);
+    public Vector3 cameraPhysicalOffset = Vector3.zero;
 
     // --- VARIABILE PER LO SPOSTAMENTO DELL'ORIGINE ---
     [Header("Offset Origine Marker (Metri)")]
@@ -40,6 +44,9 @@ public class PoseClient : MonoBehaviour
 
     [Header("Debug")]
     public bool logPoseData = true;
+    [Header("Meta Passthrough API")]
+    [Tooltip("Trascina qui il GameObject che contiene lo script PassthroughCameraAccess di Meta")]
+    public PassthroughCameraAccess metaCameraAccess;
 
     public float LastReprojError { get; private set; } = -1f;
     public int   LastNInliers    { get; private set; } = 0;
@@ -61,21 +68,28 @@ public class PoseClient : MonoBehaviour
         if (cameraCapture == null)
             cameraCapture = GetComponent<CameraFrameCapture>();
 
+        if (metaCameraAccess == null && cameraCapture != null)
+            metaCameraAccess = cameraCapture.metaCameraAccess;
+
         if (cameraCapture == null)
         {
             Debug.LogError("[PoseClient] CameraFrameCapture non trovato! Aggiungilo allo stesso GameObject.");
             return;
         }
-
-        Debug.Log($"[PoseClient] ✓ Server raggiungibile — tracking in attesa del comando UI.");
+        if (metaCameraAccess == null)
+        {
+            Debug.LogError("[PoseClient] PassthroughCameraAccess non assegnato!");
+            return;
+        }
     }
 
     void Update()
     {
-        if (OVRInput.GetDown(OVRInput.Button.One)) 
+        // Debug del tracciamento (Tasto X o SPAZIO)
+        if (OVRInput.GetDown(OVRInput.Button.Three)) 
         {
             _requestDebugNextFrame = true;
-            Debug.LogWarning("[PoseClient] Hai premuto A! Il prossimo frame salverà il debug sul PC.");
+            Debug.LogWarning("[PoseClient] Hai premuto X! Il prossimo frame salverà il debug sul PC.");
         }
 
         if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
@@ -125,11 +139,20 @@ public class PoseClient : MonoBehaviour
             if (jpeg == null)
                 continue;
 
-            yield return StartCoroutine(SendFrame(jpeg));
+            if (metaCameraAccess == null || !metaCameraAccess.IsPlaying)
+            {
+                Debug.LogWarning("[PoseClient] PassthroughCameraAccess non pronto: salto frame.");
+                continue;
+            }
+
+            // Questa posa è quella della camera fisica al timestamp dell'ultimo frame camera.
+            Pose cameraPoseAtFrame = metaCameraAccess.GetCameraPose();
+
+            yield return StartCoroutine(SendFrame(jpeg, cameraPoseAtFrame));
         }
     }
 
-    IEnumerator SendFrame(byte[] jpeg)
+    IEnumerator SendFrame(byte[] jpeg, Pose cameraPoseAtFrame)
     {
         string currentUrl = _poseUrl;
         
@@ -155,11 +178,11 @@ public class PoseClient : MonoBehaviour
                 yield break;
             }
 
-            ProcessResponse(req.downloadHandler.text);
+            ProcessResponse(req.downloadHandler.text, cameraPoseAtFrame);
         }
     }
 
-    void ProcessResponse(string json)
+    void ProcessResponse(string json, Pose cameraPoseAtFrame)
     {
         PoseResponse resp;
         try
@@ -180,7 +203,7 @@ public class PoseClient : MonoBehaviour
             return;
         }
 
-        const float MAX_REPROJ_PX = 0.8f;
+        const float MAX_REPROJ_PX = 3.0f;
         const int   MIN_INLIERS   = 12;
 
         if (resp.reproj_error_px > MAX_REPROJ_PX || resp.n_inliers < MIN_INLIERS)
@@ -194,18 +217,10 @@ public class PoseClient : MonoBehaviour
         Vector3 posInCamera = OpenCVTranslationToUnity(resp.tvec);
         Quaternion rotInCamera = OpenCVRotationMatrixToUnity(resp.rmat);
 
-        posInCamera += cameraPhysicalOffset; 
-
-        OVRPlugin.Posef cameraPose = OVRPlugin.GetNodePose(
-            OVRPlugin.Node.EyeLeft, 
-            OVRPlugin.Step.Render
-        );
-
-        Vector3 camPos = cameraPose.Position.FromFlippedZVector3f();
-        Quaternion camRot = cameraPose.Orientation.FromFlippedZQuatf();
-
-        Vector3 worldPos = camPos + camRot * posInCamera;
-        Quaternion worldRot = camRot * rotInCamera;
+        // Ora usiamo la posa della camera fisica reale, non quella dell'occhio sinistro.
+        // Quindi NON aggiungiamo cameraPhysicalOffset.
+        Vector3 worldPos = cameraPoseAtFrame.position + cameraPoseAtFrame.rotation * posInCamera;
+        Quaternion worldRot = cameraPoseAtFrame.rotation * rotInCamera;
 
         // =========================================================================
         // QUI AVVIENE LO SPOSTAMENTO MATEMATICO DELL'ORIGINE

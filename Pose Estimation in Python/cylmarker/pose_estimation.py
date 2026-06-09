@@ -166,6 +166,8 @@ def estimate_poses(cam_calib_data, config_file_data, data_pttrn, data_marker):
     for im_path in img_paths:
         im = cv.imread(im_path, cv.IMREAD_COLOR)
         check_image(im, im_path) # check if image was sucessfully read
+        altezza, larghezza, _ = im.shape
+        print(f"[CHECK RISOLUZIONE PYTHON] Sto tracciando su un frame di: {larghezza} x {altezza}")
         """ Step I - Undistort the input image """
         im = cv.undistort(im, cam_matrix, dist_coeff_np) # undistort each new image
         dist_coeff = None # we don't need to undistort again the same image

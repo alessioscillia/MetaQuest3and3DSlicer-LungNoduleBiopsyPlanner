@@ -89,6 +89,11 @@ def compute_reproj_error(pts3d, pts2d, rvec, tvec, inliers):
     return float(np.sqrt(np.sum(se) / n))
 
 
+def debug_mask_stats(name, mask):
+    contours, _ = cv.findContours(mask, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
+    areas = sorted([cv.contourArea(c) for c in contours], reverse=True)
+    print(f"[DEBUG] {name}: n_contours={len(contours)} | top areas={areas[:20]}")
+
 # ---------------------------------------------------------------------------
 # Endpoint principale
 # ---------------------------------------------------------------------------
@@ -133,7 +138,13 @@ def estimate_pose():
                 cv.imwrite(f"{base_debug_name}_02_mask_bg.jpg", mask_bg)
             if mask_fg is not None:
                 # 03: La maschera dei keypoints (Foreground)
-                cv.imwrite(f"{base_debug_name}_03_mask_fg.jpg", mask_fg)
+                cv.imwrite(f"{base_debug_name}_03_mask_fg.png", mask_fg)
+
+        if is_debug:
+            if mask_bg is not None:
+                debug_mask_stats("mask_bg", mask_bg)
+            if mask_fg is not None:
+                debug_mask_stats("mask_fg", mask_fg)
                 
         if mask_bg is None:
             return jsonify({'detected': False, 'reason': 'marker_not_segmented'})
@@ -205,6 +216,19 @@ def estimate_pose():
 
         # 8. Conversione rvec → matrice di rotazione 3x3
         rmat, _ = cv.Rodrigues(rvec)
+        if is_debug:
+            im_axes = im.copy()
+
+            cv.drawFrameAxes(
+                im_axes,
+                cam_matrix,
+                d_pnp,
+                rvec,
+                tvec,
+                30.0  # lunghezza assi in mm
+            )
+
+            cv.imwrite(f"{base_debug_name}_05_axes_opencv.jpg", im_axes)
 
         # 9. Conversione unità: mm → m  (i punti 3D del marker sono in mm)
         tvec_m = (tvec * 0.001).flatten()
@@ -274,6 +298,42 @@ def delete_last_frame():
         print(f"[SERVER] Calibrazione: eliminato frame_{idx:03d}.jpg | rimasti: {total}")
         return jsonify({'deleted': f"frame_{idx:03d}.jpg", 'total': total})
     return jsonify({'error': f"frame_{idx:03d}.jpg non trovato"}), 404
+
+# ---------------------------------------------------------------------------
+# Ricezione YAML hardware direttamente dal visore
+# ---------------------------------------------------------------------------
+@app.route('/upload_calib', methods=['POST'])
+def upload_calib():
+    yaml_content = request.data.decode('utf-8')
+    if not yaml_content:
+        return jsonify({'error': 'Nessun dato ricevuto'}), 400
+
+    # Individua la cartella data passata all'avvio (es. 'data')
+    data_dir = sys.argv[1] if len(sys.argv) > 1 else 'data'
+    
+    # Crea la cartella se non esiste
+    os.makedirs(data_dir, exist_ok=True)
+    
+    # Costruisci il percorso finale
+    filepath = os.path.join(data_dir, 'camera_calibration.yaml')
+
+    try:
+        # Sovrascrive (o crea) il file esistente nella cartella data/
+        with open(filepath, 'w') as f:
+            f.write(yaml_content)
+        
+        print(f"\n[SERVER] <<< NUOVA CALIBRAZIONE RICEVUTA DAL VISORE >>>")
+        print(f"[SERVER] Salvata con successo in: {os.path.abspath(filepath)}")
+        
+        # RICARICA A CALDO! 
+        # La funzione load_all_data aggiornerà globalmente cam_matrix e dist_coeff
+        load_all_data(data_dir)
+        
+        return jsonify({'saved': True, 'message': 'Calibrazione aggiornata a caldo.'})
+    
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # ---------------------------------------------------------------------------

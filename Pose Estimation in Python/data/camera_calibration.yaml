@@ -1,2 +1,2 @@
-intrinsic: [[900., 0., 359.5], [0., 900., 287.5], [0., 0., 1.]]
-distortion: [0., 0., 0., 0.] # Image from simulation had no distortion
+intrinsic: [[870.0388, 0.0, 635.9969], [0.0, 870.0388, 482.2854], [0.0, 0.0, 1.0]]
+distortion: [0.0, 0.0, 0.0, 0.0, 0.0]

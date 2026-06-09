@@ -62,7 +62,9 @@ class Keypoint:
     def calculate_xyz(self, radius, mm_per_pixel, marker_width, tmp_uv):
         u, v = tmp_uv
         x = v * mm_per_pixel
-        alpha = math.radians((u/marker_width) * 360.0)
+        # Angolo coperto corretto in base alla dimensione reale della stampa sul cilindro
+        angolo_coperto = 360 
+        alpha = math.radians((u/marker_width) * angolo_coperto) 
         y = radius * math.sin(alpha)
         z = radius * math.cos(alpha)
         return x, y, z
@@ -101,7 +103,7 @@ class Keypoint:
             x = m['mu20'] + m['mu02']
             y = 4 * m['mu11']**2 + (m['mu20'] - m['mu02'])**2
             if (x - y**0.5) < 0.0001:
-                self.elong = 0.0 # TODO: maybe I should set to None
+                self.elong = 0.0 
             self.elong = (x + y**0.5) / (x - y**0.5)
 
     def set_anchor_du_dv(self, anchor_du, anchor_dv):
@@ -159,19 +161,10 @@ class Sequence:
             kpt.set_xyz_of_centre_and_corners(data_marker_kpt)
 
     def label_keypoints(self, max_ang_diff_label):
-        """
-        # Label by area
-        self.calculate_avrg_area()
-        for kpt in self.list_kpts:
-            if kpt.cntr_area < self.avrg_area:
-                kpt.label = 0
-            else:
-                kpt.label = 1
-        """
         for kpt in self.list_kpts:
             if kpt.label == -1:
                 kpt_angle_rads = kpt.cntr_angle_rads
-                kpt_angle = math.degrees(kpt_angle_rads % (2 * math.pi)) # get angle between [0 and 360[
+                kpt_angle = math.degrees(kpt_angle_rads % (2 * math.pi))
                 if kpt_angle >= 180.0:
                     kpt_angle -= 180.0
                 kpt.label = 0
@@ -212,7 +205,6 @@ class Pattern:
         return pnts_3d_object, pnts_2d_image
 
 
-
 def draw_contours(im, contours, color):
     for cntr in contours:
         cv.drawContours(im, [cntr], -1, color, 1)
@@ -223,79 +215,28 @@ def find_angles_with_other_keypoints(kpt_anchor, kpts_list, max_ang_diff):
     anchor_u, anchor_v = kpt_anchor.get_centre_uv()
     angles = []
     angles_kpts = []
-    for kpt in kpts_list: # TODO: could be done in parallel
+    for kpt in kpts_list: 
         if kpt is not kpt_anchor and not kpt.used:
             u, v = kpt.get_centre_uv()
-            """
-              -----> (u)
-              |    90*
-              v 0* x 180*
-             (v)  270*
-            """
+            
             du = (anchor_u - u)
             dv = (anchor_v - v)
             kpt.set_anchor_du_dv(du, dv)
 
             angle_rads = math.atan2(dv, du)
-            angle = math.degrees(angle_rads % (2 * math.pi)) # get angle between [0* and 360*[
-            """ example: both the kpts in 100* and 280* belong to the same line
-                        , so we can remap the ones > 180*, by subtracting 180.
-
-              -----> (u)                       -----> (u)
-              |      90*a                      |      90*a
-              |                                |
-              |    0* x 180*                   |    0* x 0*
-              |                                |
-              v     b         a = 100*         v     b       a = 100*
-             (v)     270*     b = 280*        (v)      90*   b = 100*
-            """
+            angle = math.degrees(angle_rads % (2 * math.pi)) 
+            
             if angle >= 180.0:
                 angle -= 180.0
             angles.append(angle)
             angles_kpts.append(kpt)
 
-            """ The issue is that nearby points can still have very distinct values
-
-              -----> (u)
-              |      90*
-              |   a       b
-              |    0* x 0*     a =   1*
-              |   d       c    b = 179*
-              v                c =   1*
-             (v)     90*       d = 179*
-
-              With these values, we would not be able to match `a` with `b`,
-              `a` with `d`, `b` with `c` and `c` with `d`.
-
-              The discontinuity issue is always between a small angle (close to 0*)
-              and a large angle (close to 180*). So we can solve it by simply splitting
-              the small angles into two possible angles:
-                        a_1 = 1* or a_2 = 181*
-                        c_1 = 1* or c_2 = 181*
-
-              And, then if we compare all the values, including the new ones _1/_2,
-              we can group all the keypoints in the same sequence. Notice, that the
-              found sequence can only have either `a_1` or `a_2` and not both.
-
-              Adding an additional point is ok since we will sort the angles, and consequently
-              only one of them will be assigned to the forming sequence of keypoints.
-              In other words, since 1* and 181* is so different (> `max_ang_diff_group`) when
-              we assign a group only either _1 or _2 will be used:
-
-              Example:
-              Imagine this sorted group of angles, see how they end up in very distinct positions:
-              0, 1 (= a), 2, 3, 20, 21, 40, 60, 179, 179, 180, 180, 180, 181 (= a+180)
-                      ^                                                         ^
-                      | a_1                                                     | a_2
-            """
             if angle < max_ang_diff:
                 angles.append(angle + 180.0)
-                # additional angle but keypoint is the same
                 angles_kpts.append(kpt)
-    # Convert to numpy arrays
+    
     angles = np.array(angles)
     angles_kpts = np.array(angles_kpts)
-    # Sort them
     angles_argsort = np.argsort(angles)
     return angles[angles_argsort], angles_kpts[angles_argsort]
 
@@ -304,65 +245,56 @@ def sort_kpts_by_dist_to_anchor(sqnc_kpts, angl_median, kpt_anchor):
     angl_median = 180.0 - angl_median
     angl_median_rad = math.radians(angl_median)
 
-    dist_anchor = [] # store distances to anchor point
+    dist_anchor = [] 
     for kpt in sqnc_kpts:
         u_new = - kpt.anchor_du * math.cos(angl_median_rad) + kpt.anchor_dv * math.sin(angl_median_rad)
         dist_anchor.append(u_new)
 
-    # Add anchor point too
     sqnc_kpts = np.append(sqnc_kpts, kpt_anchor)
-    dist_anchor.append(0.0) # Distance from anchor to anchor = 0.0
+    dist_anchor.append(0.0) 
 
     dist_anchor_argsort = np.argsort(dist_anchor)
     return sqnc_kpts[dist_anchor_argsort]
 
 
 def find_sequence(kpt_anchor, angles, angles_kpts, max_ang_diff, sequence_length):
-    # Find a group of angles of size `sequence_length`.
-    # In that group, the `max - min` must be smaller than max_ang_diff.
     """
-        example (sequence_length = 4):
-
-        iteration=1
-        [ 3.5  4.3  5.2  6.9  7.8  8.3  8.5  9.8  9.9  9.9]
-          ___  ___  ___  ___
-           ^              ^
-           |              |
-         ind_head      ind_tail
-
-        iteration=2
-        [ 3.5  4.3  5.2  6.9  7.8  8.3  8.5  9.8  9.9  9.9]
-               ___  ___  ___  ___
-                ^              ^
-                |              |
-             ind_head      ind_tail
-
-        iteration=N
-        [ 3.5  4.3  5.2  6.9  7.8  8.3  9.5  9.8  9.9  9.9]
-                                        ___  ___  ___  ___
-                                         ^              ^
-                                         |              |
-                                   ind_head_max      ind_tail
+    sequence_length qui indica il numero di keypoint DA TROVARE ESCLUDENDO l'anchor.
+    Quindi, se voglio una sequenza totale di 8 keypoint, chiamo questa funzione con 7.
     """
+
     n_angles = len(angles)
+
+    # Protezione fondamentale: se non ho abbastanza angoli, non posso formare la sequenza.
+    if sequence_length <= 0 or n_angles < sequence_length:
+        return None
+
     ind_head_max = n_angles - sequence_length
     sqnc = None
-    for ind_head, ang_head in enumerate(angles[0:ind_head_max + 1]): # + 1 since exclusive
+
+    for ind_head in range(ind_head_max + 1):
         ind_tail = ind_head + sequence_length - 1
+
+        # Ulteriore protezione difensiva
+        if ind_tail >= n_angles:
+            continue
+
         if (angles[ind_tail] - angles[ind_head]) < max_ang_diff:
             if ind_head < ind_head_max:
-                # If there are more angles we will check if the next angle also respects
-                # the same condition, if so it means that there are more than n=`sequence_length`
-                # keypoints detected in that line, so we will skip it
-                while ind_tail < ind_head_max:
+                while ind_tail + 1 < n_angles:
                     if (angles[ind_tail + 1] - angles[ind_head]) > max_ang_diff:
-                        break # the while
+                        break
                     ind_tail += 1
-            # Sequence found!
-            sqnc_kpts = angles_kpts[ind_head:ind_tail + 1] # + 1 since exclusive
-            angl_median = np.median(angles[ind_head:ind_tail + 1]) # + 1 since exclusive
-            sqnc_kpts = sort_kpts_by_dist_to_anchor(sqnc_kpts, angl_median, kpt_anchor)
-            # Create sequence object
+
+            sqnc_kpts = angles_kpts[ind_head:ind_tail + 1]
+            angl_median = np.median(angles[ind_head:ind_tail + 1])
+
+            sqnc_kpts = sort_kpts_by_dist_to_anchor(
+                sqnc_kpts,
+                angl_median,
+                kpt_anchor
+            )
+
             sqnc = Sequence(sqnc_kpts)
             sqnc.set_angl_median(angl_median)
             break
@@ -379,52 +311,53 @@ def show_centres(im, sqnc, color):
 
 
 def fit_line_and_adjust_keypoint_centres(im, sqnc):
-    # ref: https://scikit-spatial.readthedocs.io/en/stable/gallery/projection/plot_point_line.html#sphx-glr-download-gallery-projection-plot-point-line-py
     im_copy = im.copy()
     red = (0, 0, 255)
     green = (0, 255, 0)
-    #show_centres(im_copy, sqnc, red)
     points = []
     for kpt in sqnc.list_kpts:
         u, v = kpt.get_centre_uv()
         points.append([[u], [v]])
     points = np.asarray(points, dtype=np.float)
-    #vx, vy, x0, y0 = cv.fitLine(points=points, distType=cv.DIST_WELSCH, param=0, reps=0.01, aeps=0.01)
     vx, vy, x0, y0 = cv.fitLine(points=points, distType=cv.DIST_FAIR, param=0, reps=0.01, aeps=0.01)
-    #, where (vx, vy) is a normalized vector collinear to the line and (x0, y0) is a point on the line
     line = Line(point=[x0[0], y0[0]], direction=[vx[0], vy[0]])
     for kpt in sqnc.list_kpts:
         u, v = kpt.get_centre_uv()
         pt = Point([u, v])
         pt_proj = line.project_point(pt)
         kpt.set_centre_uv(pt_proj[0], pt_proj[1])
-    #show_centres(im_copy, sqnc, green)
     return sqnc
 
 
 def group_keypoint_in_sequences(im, sqnc_kpts, max_ang_diff, sequence_length, min_detected_sqnc):
-    # ref: https://www.cs.princeton.edu/courses/archive/spring03/cs226/assignments/lines.html
     n_keypoints = len(sqnc_kpts)
     used_kpts_counter = 0
     sqnc_list = []
+    
+    # Consentiamo alle sequenze di perdere fino a 2 keypoint (mantenendo un minimo vitale di 3 punti)
+    min_allowed_length = max(3, sequence_length - 2)
+
     for kpt_anchor in sqnc_kpts:
-        if (n_keypoints - used_kpts_counter) < sequence_length:
-            # it won't be possible to find another sequence
-            # since we would need at least n = sequence_length
-            # keypoints that were not used yet
+        if (n_keypoints - used_kpts_counter) < min_allowed_length:
             break
         if not kpt_anchor.used:
-            # Find angles that the `kpt_anchor` does with the other `kpts` that were not used yet
             angles, angles_kpts = find_angles_with_other_keypoints(kpt_anchor, sqnc_kpts, max_ang_diff)
-            sqnc = find_sequence(kpt_anchor, angles, angles_kpts, max_ang_diff, sequence_length - 1) # - 1 since we are not including the anchor
+            
+            sqnc = None
+            # Tenta iterativamente di formare una sequenza, partendo dalla lunghezza ideale scendendo a quella minima
+            for target_len in range(sequence_length, min_allowed_length - 1, -1):
+                sqnc = find_sequence(kpt_anchor, angles, angles_kpts, max_ang_diff, target_len - 1)
+                if sqnc is not None:
+                    break
+            
             if sqnc is not None:
-                # Flag those keypoints as used
                 for kpt in sqnc.list_kpts:
                     kpt.used = True
                     used_kpts_counter += 1
-                if len(sqnc.list_kpts) == sequence_length:
-                    #sqnc = fit_line_and_adjust_keypoint_centres(im, sqnc) # The improvement is almost neglectable
+                # Se la sequenza trovata ha una lunghezza accettabile, la registriamo
+                if len(sqnc.list_kpts) >= min_allowed_length:
                     sqnc_list.append(sqnc)
+
     if len(sqnc_list) < min_detected_sqnc:
         return None
     pttrn = Pattern(sqnc_list)
@@ -432,14 +365,8 @@ def group_keypoint_in_sequences(im, sqnc_kpts, max_ang_diff, sequence_length, mi
 
 
 def calculate_contour_centre(cntr):
-    """
-    # TODO: try using only these two lines, instead of the rest
-    centre, _size, _angl = cv.minAreaRect(cntr)
-    centre_u, centre_v = centre
-    """
     moments = cv.moments(cntr)
     if moments["m00"] == 0.0:
-        # get geometrical centre instead
         centre, _size, _angl = cv.minAreaRect(cntr)
         centre_u, centre_v = centre
     else:
@@ -449,7 +376,6 @@ def calculate_contour_centre(cntr):
 
 
 def get_connected_components(mask_marker_fg, min_n_keypoints):
-    # Using connected components as keypoints (later in the code they will be uniquely identified)
     contours, _hierarchy = cv.findContours(mask_marker_fg, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_NONE)
     n_keypoints_detected = len(contours)
     if n_keypoints_detected < min_n_keypoints:
@@ -484,30 +410,58 @@ def show_labels(im, sqnc):
 
 
 def find_code_match(im, sqnc, data_pttrn, name_code, name_kpt_ids, used_ind):
-    #show_labels(im, sqnc)
     sqnc_code = sqnc.get_code()
+    sqnc_str = "".join(map(str, sqnc_code))
+
+    matches = []
+
     for ind, name_sqnc in enumerate(data_pttrn):
-        if ind not in used_ind:
-            pttrn_sqnc = data_pttrn[name_sqnc]
-            pttrn_code = pttrn_sqnc[name_code]
-            if sqnc_code == pttrn_code: #the equality operator == compares a list element-wise
-                used_ind.append(ind)
-                sqnc.sqnc_id = name_sqnc
-                return sqnc, pttrn_sqnc[name_kpt_ids], used_ind
-            elif sqnc_code == pttrn_code[::-1]: # check reverted pattern too
-                used_ind.append(ind)
-                sqnc.sqnc_id = name_sqnc
-                return sqnc, pttrn_sqnc[name_kpt_ids][::-1], used_ind
-    return sqnc, None, used_ind
+        if ind in used_ind:
+            continue
+
+        pttrn_sqnc = data_pttrn[name_sqnc]
+
+        pttrn_code = pttrn_sqnc[name_code]
+        pttrn_ids = pttrn_sqnc[name_kpt_ids]
+
+        pttrn_str = "".join(map(str, pttrn_code))
+        pttrn_str_rev = "".join(map(str, pttrn_code[::-1]))
+
+        # Match diretto
+        start = pttrn_str.find(sqnc_str)
+        while start != -1:
+            matched_ids = pttrn_ids[start:start + len(sqnc_code)]
+            matches.append((ind, name_sqnc, matched_ids))
+            start = pttrn_str.find(sqnc_str, start + 1)
+
+        # Match invertito
+        start = pttrn_str_rev.find(sqnc_str)
+        while start != -1:
+            matched_ids = pttrn_ids[::-1][start:start + len(sqnc_code)]
+            matches.append((ind, name_sqnc, matched_ids))
+            start = pttrn_str_rev.find(sqnc_str, start + 1)
+
+    # Se non c'è match, rifiuto
+    if len(matches) == 0:
+        return sqnc, None, used_ind
+
+    # Se ci sono più match, la sottosequenza è ambigua: meglio rifiutare
+    if len(matches) > 1:
+        return sqnc, None, used_ind
+
+    ind, name_sqnc, matched_kpt_ids = matches[0]
+
+    used_ind.append(ind)
+    sqnc.sqnc_id = name_sqnc
+
+    return sqnc, matched_kpt_ids, used_ind
 
 
 def identify_sequence_and_keypoints(im, pttrn, max_ang_diff_label, data_pttrn, sequence_length, min_detected_sqnc, data_marker):
-    # Label keypoints as 0 or 1
     for sqnc in pttrn.list_sqnc:
         sqnc.label_keypoints(max_ang_diff_label)
 
-    # Identify keypoints
-    used_ind = [] # keep track of the sequences that were already found
+    used_ind = [] 
     for sqnc in pttrn.list_sqnc:
         sqnc, kpt_ids, used_ind = find_code_match(im, sqnc, data_pttrn, sqnc.NAME_CODE, sqnc.NAME_KPT_IDS, used_ind)
         if kpt_ids is not None:
@@ -519,23 +473,6 @@ def identify_sequence_and_keypoints(im, pttrn, max_ang_diff_label, data_pttrn, s
 
 
 def remove_outlier_sequences(pttrn, sqnc_max_ind, min_detected_sqnc, max_detected_sqnc):
-    """
-      Check if those sequences can be seen simultaneously by the camera.
-      If not we will remove the ones that don't make part of the group.
-
-      Imagine that you have the following pattern, with sqnc_max_ind = 9
-      and max_detected_sqnc = 3
-        0  1  2  3  4  5  6  7  8  9
-       |_______|
-          |_______|
-                     ...               0  1
-                            |_______|
-                               |____| |_|
-                                  |_| |____| -> E.g., `sequence_9` could be seen with `sequence_0` or `sequence_1`
-
-      Out of all the ranges (|___|) we will use the one with more inliers,
-      the other sequences will be considered outliers.
-    """
     list_sqnc_identified = pttrn.get_identified_sqnc_list()
     n_sqnc_identified = len(list_sqnc_identified)
     counter_inliers_max = -1
@@ -549,34 +486,32 @@ def remove_outlier_sequences(pttrn, sqnc_max_ind, min_detected_sqnc, max_detecte
             tail -= (sqnc_max_ind + 1)
             ranges.append([head, sqnc_max_ind])
             ranges.append([0, tail])
-        # count how many of the sequences are inside either of the ranges
+        
         counter_inliers = 0
         for sqnc in list_sqnc_identified:
             sqnc_id = sqnc.get_sqnc_id_int()
             for (rng_min, rng_max) in ranges:
                 if sqnc_id >= rng_min and sqnc_id <= rng_max:
                     counter_inliers += 1
-                    break # the inner for loop
-        # if all the detected sqnc are inside either of the ranges, then they are all inliers
+                    break 
+        
         if n_sqnc_identified == counter_inliers:
             return pttrn
-        # else, update
+        
         if counter_inliers > counter_inliers_max:
             counter_inliers_max = counter_inliers
             ranges_with_more_inliers = ranges
 
-    # The number of inlier sequences should be between min_detected_sqnc and max_detected_sqnc
     if counter_inliers_max < min_detected_sqnc or counter_inliers_max > max_detected_sqnc:
         return None
 
-    # Change the sqnc_id to -1 on the outliers
     for sqnc in list_sqnc_identified:
         sqnc_id = sqnc.get_sqnc_id_int()
         outlier = True
         for (rng_min, rng_max) in ranges_with_more_inliers:
             if sqnc_id >= rng_min and sqnc_id <= rng_max:
                 outlier = False
-                break # the inner for loop
+                break 
         if outlier:
             sqnc.sqnc_id = -1
 
@@ -584,24 +519,26 @@ def remove_outlier_sequences(pttrn, sqnc_max_ind, min_detected_sqnc, max_detecte
 
 
 def find_keypoints(im, mask_marker_fg, config_file_data, sqnc_max_ind, sequence_length, data_pttrn, data_marker):
-    # Load data needed to find sequences of keypoints
     min_detected_sqnc = config_file_data['min_detected_sqnc']
     max_detected_sqnc = int((sqnc_max_ind + 1)/ 2)
     max_ang_diff_group = config_file_data['max_angle_diff_group']
     max_ang_diff_label = config_file_data['max_angle_diff_label']
 
-    min_n_keypoints = min_detected_sqnc * sequence_length
+    # La soglia minima di keypoint in totale scende per accomodare le mancanze
+    min_allowed_length = max(3, sequence_length - 2)
+    min_n_keypoints = min_detected_sqnc * min_allowed_length
+
     cnnctd_cmp_list = get_connected_components(mask_marker_fg, min_n_keypoints)
     if cnnctd_cmp_list is None:
-        return None # Not enough connected components detected
-    # Group the connected components in sequences
+        return None 
+    
     pttrn = group_keypoint_in_sequences(im, cnnctd_cmp_list, max_ang_diff_group, sequence_length, min_detected_sqnc)
     if pttrn is None:
-        return None # Not enough lines detected
-    # Identify keypoints
+        return None 
+    
     pttrn = identify_sequence_and_keypoints(im, pttrn, max_ang_diff_label, data_pttrn, sequence_length, min_detected_sqnc, data_marker)
     if pttrn is None:
-        return None # Not enough lines identified
-    # Remove outlier sequences (set sqnc.sqnc_id = -1, if it is an outlier)
+        return None 
+    
     pttrn = remove_outlier_sequences(pttrn, sqnc_max_ind, min_detected_sqnc, max_detected_sqnc)
     return pttrn
