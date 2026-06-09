@@ -75,5 +75,7 @@ The mixed-reality registration uses four QR codes with fixed payloads:
 - Basso Destra
 The printable QR-code sheet is aviable in docs/assets/qr/registration_qr_codes.pdf
 
-# Aknowledgments
-This repository borrows code from [HoloLens2and3DSlicer-PedicleScrewPlacementPlanning](https://github.com/BSEL-UC3M/HoloLens2and3DSlicer-PedicleScrewPlacementPlanning), [dvrk_calib_hand_eye](https://github.com/Cartucho/dvrk_calib_hand_eye/tree/main)
+## Aknowledgments
+This project builds on and adapts code and ideas from:
+- [HoloLens2and3DSlicer-PedicleScrewPlacementPlanning](https://github.com/BSEL-UC3M/HoloLens2and3DSlicer-PedicleScrewPlacementPlanning)
+-[dvrk_calib_hand_eye](https://github.com/Cartucho/dvrk_calib_hand_eye/tree/main)
