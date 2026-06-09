@@ -10,10 +10,7 @@ The system allows a thoracic model generated from CT segmentation to be visualiz
 
 - **LungNoduleBiopsyPlanner - 3D Slicer**
 3D Slicer module for loading CT volumes, running segmentation, planning trajectories, exporting anatomical models as GLB, and communicating with Unity through OpenIGTLink.
-<div align="center">
-  <img src="docs/assets/img1.png" alt="3D Slicer Interface" width="400"/>
-  <p><i>3D Slicer Interface</i></p>
-</div>
+![3D Slicer Interface](docs/assets/img1.png)
 - **Unity Project MQ3**
 Unity project for the Meta Quest 3 application. It handles mixed-reality visualization, QR-based registration, model interaction, slice visualization, trajectory tools, and needle tracking feedback.
 - **Pose Estimation in Python**
