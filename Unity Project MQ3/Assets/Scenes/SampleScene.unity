@@ -3064,7 +3064,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrajectoryDeviationCalculator
   laserPointer: {fileID: 666049855}
   poseClient: {fileID: 1096428585}
-  tipOffsetLocal: {x: 0, y: 0, z: 0}
   localToolAxis: {x: 1, y: 0, z: 0}
   tipOffsetAlongToolAxis: 0
   forwardSmoothing: 0.65
@@ -3072,8 +3071,19 @@ MonoBehaviour:
   rejectForwardSpikes: 1
   thresholdGreenCm: 0.5
   thresholdYellowCm: 1.5
-  errorLineWidth: 0.002
-  angleTextColor: {r: 0, g: 1, b: 1, a: 1}
+  showDottedLine: 1
+  maxErrorDots: 14
+  dotSpacingMeters: 0.002
+  dotDiameterMeters: 0.002
+  endpointDiameterMeters: 0.012
+  pulseWhenAligned: 1
+  showDistanceText: 1
+  distanceTextYOffset: 0.035
+  distanceTextFontSize: 0.18
+  showAngleText: 1
+  minAngleTextDeg: 1
+  angleTextYOffset: 0.055
+  angleTextFontSize: 0.22
   deviationTextUI: {fileID: 0}
   showHUD: 1
 --- !u!4 &1660401728
