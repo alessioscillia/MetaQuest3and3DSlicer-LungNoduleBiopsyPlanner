@@ -1,4 +1,4 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE.txt)
 <!-- [![Contributors](https://img.shields.io/github/contributors/alessioscillia/MetaQuest3and3DSlicer-LungNoduleBiopsyPlanner)](https://github.com/alessioscillia/MetaQuest3and3DSlicer-LungNoduleBiopsyPlanner/graphs/contributors) Scommentare quando renderò la repo pubblica--> 
 
 # Bringing Augmented Reality Surgical Guidance to Meta Quest 3
@@ -36,7 +36,7 @@ Python/Flask server for cylindrical-marker pose estimation. It receives camera f
   - [SlicerIGT](https://github.com/SlicerIGT/SlicerIGT)
   - [SlicerOpenIGTLink](https://github.com/openigtlink/OpenIGTLink)
   - [TotalSegmentator](https://github.com/wasserth/TotalSegmentator)
-  - Percutaneous Approach Analysis (my code)
+  - [Percutaneous Approach Analysis](LungNoduleBiopsyPlanner%20-%203DSlicer/PercutaneousApproachAnalysis.py)
   - [PortPlacement](https://www.slicer.org/wiki/Documentation/Nightly/Modules/PortPlacement) 
   - Volume Reslice Driver
 - Python packages used by the Slicer module:
