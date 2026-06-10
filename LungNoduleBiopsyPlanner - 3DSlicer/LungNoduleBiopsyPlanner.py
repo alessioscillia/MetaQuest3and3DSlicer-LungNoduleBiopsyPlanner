@@ -30,7 +30,7 @@ class LungNoduleBiopsyPlanner(ScriptedLoadableModule):
             ScriptedLoadableModule.__init__(self, parent)
             self.parent.title = "LungNoduleBiopsyPlanner"
             self.parent.categories = ["AR Surgical Procedures"]
-            self.parent.contributors = ["Chiara Pes"]
+            self.parent.contributors = ["Chiara Pes, Alessio Scillia"]
 
             
     """
