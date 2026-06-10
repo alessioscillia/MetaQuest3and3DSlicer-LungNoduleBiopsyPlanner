@@ -6,13 +6,12 @@ This repository contains an augmented reality workflow for CT-guided lung biopsy
 
 The system allows a thoracic model generated from CT segmentation to be visualized in mixed reality, automatically registered to the patient using an automatic registration method via QR code, and used for biopsy trajectory planning. It also includes a cylindrical-marker needle tracking pipeline that estimates the pose of the instrument allowing the evaluation of the deviation between the actual trajectory and the virtually selected one.
 
+![Scene](docs/assets/img2.png)
+
 ## Repository Structure
 
 - **LungNoduleBiopsyPlanner - 3D Slicer**
 3D Slicer module for loading CT volumes, running segmentation, planning trajectories, exporting anatomical models as GLB, and communicating with Unity through OpenIGTLink.
-
-![3D Slicer Interface](docs/assets/img1.png)
-
 - **Unity Project MQ3**
 Unity project for the Meta Quest 3 application. It handles mixed-reality visualization, QR-based registration, model interaction, slice visualization, trajectory tools, and needle tracking feedback.
 - **Pose Estimation in Python**
@@ -40,8 +39,7 @@ Python/Flask server for cylindrical-marker pose estimation. It receives camera f
   - [SlicerOpenIGTLink](https://github.com/openigtlink/OpenIGTLink)
   - [TotalSegmentator](https://github.com/wasserth/TotalSegmentator)
   - [Percutaneous Approach Analysis](LungNoduleBiopsyPlanner%20-%203DSlicer/PercutaneousApproachAnalysis.py)
-  - [PortPlacement](https://www.slicer.org/wiki/Documentation/Nightly/Modules/PortPlacement) 
-  - Volume Reslice Driver
+  - [PortPlacement](https://www.slicer.org/wiki/Documentation/Nightly/Modules/PortPlacement)
 - Python packages used by the Slicer module:
   - `numpy`
   - `trimesh`
