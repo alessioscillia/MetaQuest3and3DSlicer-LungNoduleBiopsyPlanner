@@ -4,7 +4,7 @@ This folder contains the 3D Slicer module used to prepare the anatomical scene f
 
 The module handles CT loading, segmentation, trajectory planning support, model export via HTTP server, and OpenIGTLink communication with Unity.
 
-![3D Slicer Interface](docs/assets/img1.png)
+![3D Slicer Interface](../docs/assets/img1.png)
 
 ## Role in the Full System
 
