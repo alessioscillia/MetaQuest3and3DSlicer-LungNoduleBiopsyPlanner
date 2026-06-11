@@ -3078,7 +3078,7 @@ MonoBehaviour:
   endpointDiameterMeters: 0.012
   pulseWhenAligned: 1
   showDistanceText: 1
-  distanceTextYOffset: 0.035
+  distanceTextYOffset: 0
   distanceTextFontSize: 0.18
   showAngleText: 1
   minAngleTextDeg: 1

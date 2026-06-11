@@ -24,13 +24,13 @@ public class AnatomyImporter : MonoBehaviour
         Camera mainCamera = Camera.main;
         if (mainCamera != null)
         {
-            // Imposta sfondo nero per VR/passthrough
+            // Set a transparent background for PassThrough mode
             mainCamera.clearFlags = CameraClearFlags.SolidColor;
             mainCamera.backgroundColor = new Color(0, 0, 0, 0);
         }
         else
         {
-            Debug.LogWarning("Nessuna MainCamera trovata. Verifica che il Camera Rig sia attivo.");
+            Debug.LogWarning("No MainCamera found. Check that the Camera Rig is active.");
         }
     }
     
@@ -38,12 +38,12 @@ public class AnatomyImporter : MonoBehaviour
     {
         if (isLoadingModel)
         {
-            Debug.LogWarning("[AnatomyImporter] Caricamento già in corso, richiesta ignorata.");
+            Debug.LogWarning("[AnatomyImporter] Loading already in progress, request ignored.");
             return;
         }
 
         isLoadingModel = true;
-        // --- MODIFICA ANTI-CACHE ---
+        // --- ANTI-CACHING MODIFICATION ---
         string noCacheUrl = url + "?t=" + System.DateTime.Now.Ticks;
         // ---------------------------
         try
