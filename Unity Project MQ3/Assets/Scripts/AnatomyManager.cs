@@ -67,7 +67,7 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Image modifyModelImage;
     [SerializeField] private Image fixModelImage;
     [SerializeField] private Image needleImage;
-    [SerializeField] private Image fixLaserImage; // Aggiunto dal LaserUIManager
+    [SerializeField] private Image sphereImage;
     
     [Tooltip("Immagine di sfondo del tasto di Tracking QR")]
     [SerializeField] private Image alignmentTrackingImage;
@@ -119,10 +119,13 @@ public class AnatomyManager : MonoBehaviour
 
         if (laserPointer != null)
         {
+            laserPointer.HideSphere();
             laserPointer.gameObject.SetActive(false);
+            isSphereHidden = true;
         }
+
         SetButtonVisualState(needleImage, false);
-        SetButtonVisualState(fixLaserImage, false);
+        SetButtonVisualState(sphereImage, false);
         SetButtonVisualState(deviationTrackingImage, false);
     }
 
@@ -633,35 +636,46 @@ public class AnatomyManager : MonoBehaviour
 
     // --- LASER POINTER CONTROLS ---
 
+    private void SpawnLaserInFrontOfUser()
+    {
+        if (laserPointer == null || playerCamera == null) return;
+
+        laserPointer.transform.position =
+            playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
+
+        laserPointer.transform.rotation =
+            Quaternion.LookRotation(playerCamera.forward);
+    }
+
+    private void SetSphereVisible(bool visible)
+    {
+        if (laserPointer == null) return;
+
+        if (visible)
+        {
+            laserPointer.ShowSphere();
+            isSphereHidden = false;
+        }
+        else
+        {
+            laserPointer.HideSphere();
+            isSphereHidden = true;
+        }
+
+        SetButtonVisualState(sphereImage, visible);
+    }
+
     public void OnSpawnLaserClicked()
     {
         if (laserPointer == null || playerCamera == null) return;
 
         laserPointer.gameObject.SetActive(true);
-        laserPointer.ShowSphere(); 
-        
-        isSphereHidden = false; 
+        SpawnLaserInFrontOfUser();
 
-        laserPointer.transform.position = playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
-        laserPointer.transform.rotation = Quaternion.LookRotation(playerCamera.forward);
+        // Quando accendo il laser, la sfera deve comparire.
+        SetSphereVisible(true);
 
         SetButtonVisualState(needleImage, true);
-    }
-
-    public void OnToggleFixLaserClicked()
-    {
-        if (laserPointer == null) return;
-
-        if (isSphereHidden)
-        {
-            laserPointer.ShowSphere();
-            isSphereHidden = false; 
-        }
-        else
-        {
-            laserPointer.HideSphere();
-            isSphereHidden = true; 
-        }
     }
 
     public void OnToggleNeedleClicked()
@@ -670,21 +684,46 @@ public class AnatomyManager : MonoBehaviour
 
         if (!laserPointer.gameObject.activeSelf)
         {
+            /*
+            * Needle OFF -> ON
+            * Accendo laser e sfera.
+            */
             laserPointer.gameObject.SetActive(true);
-            
-            laserPointer.transform.position = playerCamera.position + (playerCamera.forward * spawnDistanceInFront);
-            laserPointer.transform.rotation = Quaternion.LookRotation(playerCamera.forward);
-            
-            laserPointer.ShowSphere();
-            isSphereHidden = false;
+            SpawnLaserInFrontOfUser();
+
+            SetSphereVisible(true);
 
             SetButtonVisualState(needleImage, true);
         }
         else
         {
+            /*
+            * Needle ON -> OFF
+            * Spengo laser e sfera.
+            */
+            SetSphereVisible(false);
+
             laserPointer.gameObject.SetActive(false);
 
             SetButtonVisualState(needleImage, false);
+        }
+    }
+
+    public void OnToggleSphereClicked()
+    {
+        if (laserPointer == null) return;
+
+        // Se il laser è spento, Sphere non fa nulla.
+        if (!laserPointer.gameObject.activeSelf)
+            return;
+
+        if (isSphereHidden)
+        {
+            SetSphereVisible(true);
+        }
+        else
+        {
+            SetSphereVisible(false);
         }
     }
 
