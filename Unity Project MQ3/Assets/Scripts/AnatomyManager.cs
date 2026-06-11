@@ -58,6 +58,7 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Text tsToggleText;
 
     [Header("UI Sliders")]
+    [SerializeField] private Slider skinOpacitySlider;
     [SerializeField] private Slider lungsOpacitySlider;
     [SerializeField] private Slider bonesOpacitySlider;
     [SerializeField] private Slider awVesselsOpacitySlider;
@@ -117,6 +118,8 @@ public class AnatomyManager : MonoBehaviour
         
         UpdateTrackingButtonVisual(true);
 
+        InitializeOpacitySliders();
+
         if (laserPointer != null)
         {
             laserPointer.HideSphere();
@@ -158,13 +161,24 @@ public class AnatomyManager : MonoBehaviour
         if (lowerName.Contains("skin")) 
         {
             skinRenderer = rend;
+
             if (skinRenderer.gameObject.GetComponent<Collider>() == null)
             {
                 MeshCollider mc = skinRenderer.gameObject.AddComponent<MeshCollider>();
                 DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false; 
             }
-            skinRenderer.gameObject.layer = LayerMask.NameToLayer("SkinLayer"); 
+
+            skinRenderer.gameObject.layer = LayerMask.NameToLayer("SkinLayer");
+
+            /*
+            * Applica subito l'opacità iniziale della pelle.
+            * Di default skinOpacity = 0.2f, quindi non cambia l'aspetto iniziale.
+            */
+            SetOpacity(skinRenderer, skinOpacity);
+
+            if (skinOpacitySlider != null)
+                skinOpacitySlider.SetValueWithoutNotify(skinOpacity);
         }
         else if (lowerName.Contains("lung")) 
         {
@@ -289,6 +303,28 @@ public class AnatomyManager : MonoBehaviour
     }
     
     // --- OPACITY SLIDERS ---
+    private void InitializeOpacitySliders()
+    {
+        /*
+        * Usiamo SetValueWithoutNotify per evitare che Unity chiami subito
+        * gli eventi OnValueChanged prima che il modello sia stato importato.
+        *
+        * La pelle parte da skinOpacity = 0.2f, quindi l'aspetto iniziale
+        * rimane uguale a quello attuale.
+        */
+
+        if (skinOpacitySlider != null)
+            skinOpacitySlider.SetValueWithoutNotify(skinOpacity);
+
+        if (lungsOpacitySlider != null)
+            lungsOpacitySlider.SetValueWithoutNotify(lungOpacity);
+
+        if (bonesOpacitySlider != null)
+            bonesOpacitySlider.SetValueWithoutNotify(bonesOpacity);
+
+        if (awVesselsOpacitySlider != null)
+            awVesselsOpacitySlider.SetValueWithoutNotify(awVesselsOpacity);
+    }
     private void SetOpacity(Renderer rend, float alphaVal)
     {
         if (rend != null && rend.material != null)
@@ -341,7 +377,13 @@ public class AnatomyManager : MonoBehaviour
         mat.SetShaderPassEnabled("ShadowCaster", false);
     }
     
-    public void UpdateSkinOpacity(float value) { skinOpacity = Mathf.Clamp01(value); SetOpacity(skinRenderer, skinOpacity); }
+    public void UpdateSkinOpacity(float value)
+    {
+        skinOpacity = Mathf.Clamp01(value);
+
+        if (skinRenderer != null)
+            SetOpacity(skinRenderer, skinOpacity);
+    }
     public void UpdateLungOpacity(float value) { lungOpacity = Mathf.Clamp01(value); SetOpacity(lungRenderer, isTSVisible ? tsMasterOpacity : lungOpacity); }
     public void UpdateBonesOpacity(float value) { bonesOpacity = Mathf.Clamp01(value); SetOpacity(bonesRenderer, isTSVisible ? tsMasterOpacity : bonesOpacity); }
     public void UpdateVesselsOpacity(float value)
@@ -416,9 +458,16 @@ public class AnatomyManager : MonoBehaviour
 
     public void ToggleSkin(bool isVisible) 
     { 
-        if (skinRenderer) skinRenderer.enabled = isVisible; 
-        if (isVisible) SetOpacity(skinRenderer, skinOpacity); // Forza aggiornamento materiale
-        if (skinToggleText) skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF"; 
+        if (skinRenderer != null)
+        {
+            skinRenderer.enabled = isVisible;
+
+            if (isVisible)
+                SetOpacity(skinRenderer, skinOpacity);
+        }
+
+        if (skinToggleText != null)
+            skinToggleText.text = isVisible ? "Skin ON" : "Skin OFF"; 
     }
     
     public void ToggleLungs(bool isVisible) 
