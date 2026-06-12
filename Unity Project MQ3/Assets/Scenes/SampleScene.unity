@@ -1041,7 +1041,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize: 10
   m_Shadows:
-    m_Type: 2
+    m_Type: 0
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 1
@@ -2443,7 +2443,7 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 256
   distanceTextUI: {fileID: 1780695781}
-  skinEntryMarkerDiameter: 0.01
+  skinEntryMarkerDiameter: 0.005
   skinEntryLabelFontSize: 0.035
   skinEntryLabelOffsetRight: 0.04
   skinEntryLabelOffsetUp: 0.025

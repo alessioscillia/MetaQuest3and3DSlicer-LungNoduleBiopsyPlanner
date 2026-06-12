@@ -359,6 +359,7 @@ public class AnatomyImporter : MonoBehaviour
             }
 
             rend.material = mat;
+            DisableRendererShadows(rend);
 
             if (AnatomyManager.Instance != null)
             {
@@ -391,6 +392,18 @@ public class AnatomyImporter : MonoBehaviour
         mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
         mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
         mat.SetShaderPassEnabled("ShadowCaster", true);
+    }
+    void DisableRendererShadows(Renderer rend)
+    {
+        if (rend == null) return;
+
+        rend.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        rend.receiveShadows = false;
+
+        if (rend.material != null)
+        {
+            rend.material.SetShaderPassEnabled("ShadowCaster", false);
+        }
     }
     
     bool TryGetMaterialColor(Material mat, out Color color)
