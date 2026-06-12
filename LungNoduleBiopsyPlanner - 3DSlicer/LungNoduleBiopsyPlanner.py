@@ -389,7 +389,7 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             with slicer.util.tryWithErrorDisplay("Failed to compute segmentation.", waitCursor=True):
                 # Run the segmentation
                 Logic.process(inputVolume, segmentationNode, 
-                            quality="fast",  # Full resolution for better accuracy 
+                            quality="normal",  # Full resolution for better accuracy 
                             cpu=False,   # Use GPU if available
                             task="total",
                             interactive=True)
@@ -442,7 +442,7 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             with slicer.util.tryWithErrorDisplay("Failed to compute segmentation.", waitCursor=True):
                 # Run the segmentation
                 Logic.process(inputVolume, segmentationNode, 
-                            quality="fast",  # Full resolution for better accuracy 
+                            quality="normal",  # Full resolution for better accuracy 
                             cpu=False,   # Use GPU if available
                             task="lung_nodules",
                             interactive=True)
@@ -519,7 +519,7 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             with slicer.util.tryWithErrorDisplay("Failed to compute segmentation.", waitCursor=True):
                 # Run the segmentation
                 Logic.process(inputVolume, segmentationNode, 
-                            quality="fast",  # Full resolution for better accuracy 
+                            quality="normal",  # Full resolution for better accuracy 
                             cpu=False,   # Use GPU if available
                             task="lung_vessels",
                             interactive=True)
@@ -573,7 +573,7 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                 Logic.process(
                     inputVolume,
                     segmentationNode,
-                    quality="fast",
+                    quality="normal",
                     cpu=False,
                     task="body",
                     interactive=True
@@ -646,11 +646,33 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                 # Keep model nodes hidden initially; user enables via Show 3D button
                 for modelNode in slicer.util.getNodesByClass('vtkMRMLModelNode'):
                     if modelNode.GetName().startswith("Skin"):
-                        # --- DECIMAZIONE PELLE ---
-                        self.addLog("Ottimizzazione modello Skin in corso (riduzione 90%)...")
-                        # La pelle è molto liscia, possiamo permetterci una riduzione aggressiva
-                        self.logic.decimate(modelNode, modelNode, reductionFactor=0.90, decimateBoundary=True)
-                        # -------------------------
+                        self.addLog("Smoothing modello Skin in corso...")
+
+                        # 1. Smoothing iniziale per ridurre l'effetto voxel/slice
+                        self.logic.smoothModel(
+                            modelNode,
+                            modelNode,
+                            iterations=40,
+                            passBand=0.06
+                        )
+
+                        # 2. Decimazione meno aggressiva
+                        self.addLog("Decimazione modello Skin in corso (riduzione 50%)...")
+                        self.logic.decimate(
+                            modelNode,
+                            modelNode,
+                            reductionFactor=0.50,
+                            decimateBoundary=True
+                        )
+
+                        # 3. Smoothing leggero finale + ricalcolo normals
+                        self.logic.smoothModel(
+                            modelNode,
+                            modelNode,
+                            iterations=15,
+                            passBand=0.10
+                        )
+
                         modelNode.GetDisplayNode().SetVisibility(False)
 
                 # Enable the Show 3D button now that the model exists
@@ -1765,3 +1787,37 @@ class LungNoduleBiopsyPlannerLogic(ScriptedLoadableModuleLogic, VTKObservationMi
         }
         cliNode = slicer.cli.runSync(slicer.modules.decimation, None, parameters)
         slicer.mrmlScene.RemoveNode(cliNode)
+
+    @staticmethod
+    def smoothModel(inputModel, outputModel=None, iterations=30, passBand=0.08):
+        """
+        Smoothing della mesh tramite vtkWindowedSincPolyDataFilter.
+        Utile per rimuovere l'effetto 'a gradini' delle superfici derivate da labelmap.
+        """
+        if outputModel is None:
+            outputModel = inputModel
+
+        polyData = inputModel.GetPolyData()
+        if polyData is None or polyData.GetNumberOfPoints() == 0:
+            return
+
+        smoother = vtk.vtkWindowedSincPolyDataFilter()
+        smoother.SetInputData(polyData)
+        smoother.SetNumberOfIterations(iterations)
+        smoother.SetPassBand(passBand)
+        smoother.BoundarySmoothingOff()
+        smoother.FeatureEdgeSmoothingOff()
+        smoother.NonManifoldSmoothingOn()
+        smoother.NormalizeCoordinatesOn()
+        smoother.Update()
+
+        normals = vtk.vtkPolyDataNormals()
+        normals.SetInputConnection(smoother.GetOutputPort())
+        normals.SetFeatureAngle(80.0)
+        normals.SplittingOff()
+        normals.ConsistencyOn()
+        normals.AutoOrientNormalsOn()
+        normals.Update()
+
+        outputModel.SetAndObservePolyData(normals.GetOutput())
+        outputModel.Modified()

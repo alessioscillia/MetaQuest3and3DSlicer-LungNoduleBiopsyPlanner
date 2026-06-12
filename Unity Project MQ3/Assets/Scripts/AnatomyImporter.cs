@@ -269,7 +269,7 @@ public class AnatomyImporter : MonoBehaviour
             }
             else if (lower.Contains("bones") || lower.Contains("rib") || lower.Contains("vertebra"))
             {
-                isTransparent = true;
+                isTransparent = false;
                 startHidden = true;
                 fallbackColor = new Color(0.9f, 0.9f, 0.8f, 1.0f);
             }

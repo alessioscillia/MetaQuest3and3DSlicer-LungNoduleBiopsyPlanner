@@ -330,50 +330,102 @@ public class AnatomyManager : MonoBehaviour
         if (rend != null && rend.material != null)
         {
             Material mat = rend.material;
-            
-            // 1. Applica le configurazioni di blending (già presenti nel tuo codice)
-            ConfigureMaterialSurfaceForAlpha(rend, alphaVal); 
 
-            // 2. Determina quale nome usa lo shader per il colore base
+            alphaVal = Mathf.Clamp01(alphaVal);
+
+            // Se alpha ~ 1, renderizza come opaco.
+            // Se alpha < 1, renderizza come trasparente.
+            bool renderedOpaque = ConfigureMaterialSurfaceForAlpha(rend, alphaVal);
+
             string colorProp = "";
-            if (mat.HasProperty("baseColorFactor")) colorProp = "baseColorFactor"; // Specifico dello shader glTFast!
-            else if (mat.HasProperty("_BaseColor")) colorProp = "_BaseColor";      // Specifico di URP/Lit
-            else if (mat.HasProperty("_Color")) colorProp = "_Color";              // Fallback standard
+            if (mat.HasProperty("baseColorFactor")) colorProp = "baseColorFactor";
+            else if (mat.HasProperty("_BaseColor")) colorProp = "_BaseColor";
+            else if (mat.HasProperty("_Color")) colorProp = "_Color";
 
-            // 3. Modifica l'Alpha e riapplica
             if (colorProp != "")
             {
                 Color currentColor = mat.GetColor(colorProp);
-                currentColor.a = alphaVal;
+
+                // Se il materiale è opaco, forziamo alpha a 1.
+                // Se è trasparente, usiamo il valore dello slider.
+                currentColor.a = renderedOpaque ? 1f : alphaVal;
+
                 mat.SetColor(colorProp, currentColor);
             }
         }
     }
 
-    private void ConfigureMaterialSurfaceForAlpha(Renderer rend, float alphaVal)
+    private bool ConfigureMaterialSurfaceForAlpha(Renderer rend, float alphaVal)
     {
         Material mat = rend.material;
+        if (mat == null) return false;
+
+        alphaVal = Mathf.Clamp01(alphaVal);
+
+        /*
+        * Quando alpha è praticamente 1, conviene usare rendering opaco.
+        * Questo evita problemi di sovrapposizione/disegno errato,
+        * soprattutto per ossa, coste, sterno e colonna.
+        */
+        bool useOpaqueRendering = alphaVal >= 0.98f;
+
+        if (useOpaqueRendering)
+        {
+            ConfigureMaterialOpaque(mat);
+            return true;
+        }
+        else
+        {
+            ConfigureMaterialTransparent(mat, rend);
+            return false;
+        }
+    }
+    private void ConfigureMaterialOpaque(Material mat)
+    {
         if (mat == null) return;
+
+        if (mat.HasProperty("_Surface"))
+            mat.SetFloat("_Surface", 0.0f);
+
+        mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.One);
+        mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.Zero);
+        mat.SetInt("_ZWrite", 1);
+
+        mat.DisableKeyword("_SURFACE_TYPE_TRANSPARENT");
+        mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
+
+        mat.SetOverrideTag("RenderType", "Opaque");
+        mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
+
+        mat.SetShaderPassEnabled("ShadowCaster", true);
+    }
+
+    private void ConfigureMaterialTransparent(Material mat, Renderer rend)
+    {
+        if (mat == null) return;
+
         string lowerName = rend.gameObject.name.ToLower();
-        
-        // Impostazioni standard URP
-        if (mat.HasProperty("_Surface")) mat.SetFloat("_Surface", 1.0f);
-        if (mat.HasProperty("_Blend")) mat.SetFloat("_Blend", 0.0f);
+
+        if (mat.HasProperty("_Surface"))
+            mat.SetFloat("_Surface", 1.0f);
+
+        if (mat.HasProperty("_Blend"))
+            mat.SetFloat("_Blend", 0.0f);
+
         mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
         mat.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
         mat.SetInt("_ZWrite", 0);
+
         mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
         mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
-        
-        // FORZATURA PER SHADER GRAPH / glTFast
-        // Questo dice esplicitamente alla pipeline grafica di trattare l'oggetto come trasparente
+
         mat.SetOverrideTag("RenderType", "Transparent");
 
-        if (lowerName.Contains("skin") || lowerName.Contains("body")) 
+        if (lowerName.Contains("skin") || lowerName.Contains("body"))
             mat.renderQueue = 3000;
-        else 
+        else
             mat.renderQueue = 3001;
-            
+
         mat.SetShaderPassEnabled("ShadowCaster", false);
     }
     
