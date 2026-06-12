@@ -228,6 +228,21 @@ public class AnatomyImporter : MonoBehaviour
             );
         }
     }
+
+    private bool IsBoneName(string lower)
+    {
+        return lower.Contains("bone")
+            || lower.Contains("bones")
+            || lower.Contains("rib")
+            || lower.Contains("ribs")
+            || lower.Contains("vertebra")
+            || lower.Contains("spine")
+            || lower.Contains("sternum")
+            || lower.Contains("clavicula")
+            || lower.Contains("clavicle")
+            || lower.Contains("scapula")
+            || lower.Contains("shoulder");
+    }
     
     void AutomateMaterialSetup(GameObject loadedModel)
     {
@@ -267,7 +282,7 @@ public class AnatomyImporter : MonoBehaviour
                 fallbackColor = new Color(1f, 0.4f, 0.4f, 1f);
                 lungObject = rend.gameObject;
             }
-            else if (lower.Contains("bones") || lower.Contains("rib") || lower.Contains("vertebra"))
+            else if (IsBoneName(lower))
             {
                 isTransparent = false;
                 startHidden = true;
@@ -338,8 +353,7 @@ public class AnatomyImporter : MonoBehaviour
                 mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive; 
             }
 
-            if (lower.Contains("lung") || lower.Contains("vessels") || lower.Contains("airways") || 
-                lower.Contains("bone") || lower.Contains("rib") || lower.Contains("vertebra"))
+            if (lower.Contains("lung") || lower.Contains("vessels") || lower.Contains("airways") || IsBoneName(lower))
             {
                 mat.renderQueue = 3001;
             }

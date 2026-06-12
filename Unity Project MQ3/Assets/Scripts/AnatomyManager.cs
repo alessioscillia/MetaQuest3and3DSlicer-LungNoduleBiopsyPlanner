@@ -12,6 +12,8 @@ public class AnatomyManager : MonoBehaviour
     [SerializeField] private Renderer skinRenderer;
     [SerializeField] private Renderer lungRenderer;
     [SerializeField] private Renderer bonesRenderer;
+    private System.Collections.Generic.List<Renderer> boneRenderers =
+    new System.Collections.Generic.List<Renderer>();
     [SerializeField] private Renderer vesselsRenderer;
     [SerializeField] private Renderer airwaysRenderer;
     [SerializeField] private Renderer noduleRenderer;
@@ -153,6 +155,20 @@ public class AnatomyManager : MonoBehaviour
             spawnedFixedPlane.transform.rotation = canvasTransform.rotation;
         }
     }
+    private bool IsBoneName(string lowerName)
+    {
+        return lowerName.Contains("bone")
+            || lowerName.Contains("bones")
+            || lowerName.Contains("rib")
+            || lowerName.Contains("ribs")
+            || lowerName.Contains("vertebra")
+            || lowerName.Contains("spine")
+            || lowerName.Contains("sternum")
+            || lowerName.Contains("clavicula")
+            || lowerName.Contains("clavicle")
+            || lowerName.Contains("scapula")
+            || lowerName.Contains("shoulder");
+    }
 
     public void RegisterOrganRenderer(string objName, Renderer rend)
     {
@@ -191,16 +207,24 @@ public class AnatomyManager : MonoBehaviour
             }
             lungRenderer.gameObject.layer = LayerMask.NameToLayer("PleuraLayer"); 
         }
-        else if (lowerName.Contains("bone") || lowerName.Contains("rib") || lowerName.Contains("vertebra")) 
+        else if (IsBoneName(lowerName)) 
         {
-            bonesRenderer = rend;
-            if (bonesRenderer.gameObject.GetComponent<Collider>() == null)
+            // Manteniamo bonesRenderer per compatibilità con il vecchio codice.
+            if (bonesRenderer == null)
+                bonesRenderer = rend;
+
+            // Nuova gestione: più renderer ossei separati.
+            if (!boneRenderers.Contains(rend))
+                boneRenderers.Add(rend);
+
+            if (rend.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = bonesRenderer.gameObject.AddComponent<MeshCollider>();
+                MeshCollider mc = rend.gameObject.AddComponent<MeshCollider>();
                 DisableFastMidphaseIfAvailable(mc);
                 mc.convex = false; 
             }
-            bonesRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle"); 
+
+            rend.gameObject.layer = LayerMask.NameToLayer("Obstacle"); 
         }
         else if (lowerName.Contains("vessel")) 
         {
@@ -428,6 +452,40 @@ public class AnatomyManager : MonoBehaviour
 
         mat.SetShaderPassEnabled("ShadowCaster", false);
     }
+
+    private void SetBoneRenderersEnabled(bool isVisible)
+    {
+        bool any = false;
+
+        foreach (Renderer rend in boneRenderers)
+        {
+            if (rend == null) continue;
+
+            rend.enabled = isVisible;
+            any = true;
+        }
+
+        // Fallback per vecchi modelli con un solo renderer Bones.
+        if (!any && bonesRenderer != null)
+            bonesRenderer.enabled = isVisible;
+    }
+
+    private void SetBoneRenderersOpacity(float opacity)
+    {
+        bool any = false;
+
+        foreach (Renderer rend in boneRenderers)
+        {
+            if (rend == null) continue;
+
+            SetOpacity(rend, opacity);
+            any = true;
+        }
+
+        // Fallback per vecchi modelli con un solo renderer Bones.
+        if (!any && bonesRenderer != null)
+            SetOpacity(bonesRenderer, opacity);
+    }
     
     public void UpdateSkinOpacity(float value)
     {
@@ -437,7 +495,14 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(skinRenderer, skinOpacity);
     }
     public void UpdateLungOpacity(float value) { lungOpacity = Mathf.Clamp01(value); SetOpacity(lungRenderer, isTSVisible ? tsMasterOpacity : lungOpacity); }
-    public void UpdateBonesOpacity(float value) { bonesOpacity = Mathf.Clamp01(value); SetOpacity(bonesRenderer, isTSVisible ? tsMasterOpacity : bonesOpacity); }
+    public void UpdateBonesOpacity(float value) 
+    { 
+        bonesOpacity = Mathf.Clamp01(value);
+
+        float effectiveOpacity = isTSVisible ? tsMasterOpacity : bonesOpacity;
+
+        SetBoneRenderersOpacity(effectiveOpacity);
+    }
     public void UpdateVesselsOpacity(float value)
     {
         awVesselsOpacity = Mathf.Clamp01(value);
@@ -463,7 +528,7 @@ public class AnatomyManager : MonoBehaviour
             if (awVesselsOpacitySlider != null) awVesselsOpacitySlider.value = awVesselsOpacity;
 
             SetOpacity(lungRenderer, tsMasterOpacity);
-            SetOpacity(bonesRenderer, tsMasterOpacity);
+            SetBoneRenderersOpacity(tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
             SetOpacity(airwaysRenderer, tsMasterOpacity);
             SetOpacity(arteriesRenderer, tsMasterOpacity);
@@ -477,7 +542,7 @@ public class AnatomyManager : MonoBehaviour
     {
         isTSVisible = isVisible;
 
-        if (bonesRenderer) bonesRenderer.enabled = isVisible;
+        SetBoneRenderersEnabled(isVisible);
         if (lungRenderer) lungRenderer.enabled = isVisible;
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible;
         if (arteriesRenderer) arteriesRenderer.enabled = isVisible; 
@@ -496,7 +561,7 @@ public class AnatomyManager : MonoBehaviour
             if (awVesselsOpacitySlider != null) awVesselsOpacitySlider.value = awVesselsOpacity;
 
             SetOpacity(lungRenderer, tsMasterOpacity);
-            SetOpacity(bonesRenderer, tsMasterOpacity);
+            SetBoneRenderersOpacity(tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
             SetOpacity(airwaysRenderer, tsMasterOpacity);
             SetOpacity(arteriesRenderer, tsMasterOpacity); 
@@ -531,9 +596,16 @@ public class AnatomyManager : MonoBehaviour
     
     public void ToggleBones(bool isVisible) 
     { 
-        if (bonesRenderer) bonesRenderer.enabled = isVisible; 
-        if (isVisible) SetOpacity(bonesRenderer, isTSVisible ? tsMasterOpacity : bonesOpacity);
-        if (bonesToggleText) bonesToggleText.text = isVisible ? "Bones ON" : "Bones OFF"; 
+        SetBoneRenderersEnabled(isVisible);
+
+        if (isVisible)
+        {
+            float effectiveOpacity = isTSVisible ? tsMasterOpacity : bonesOpacity;
+            SetBoneRenderersOpacity(effectiveOpacity);
+        }
+
+        if (bonesToggleText)
+            bonesToggleText.text = isVisible ? "Bones ON" : "Bones OFF"; 
     }
     
     public void ToggleVessels(bool isVisible) 

@@ -870,47 +870,85 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
         # Puoi renderla più sofisticata quando vuoi.
         def get_clean_category(raw_name):
             lower_name = (raw_name or "").lower().replace("_", " ")
+
             if "tool" in lower_name:
                 return "Tool"
+
             if "skin" in lower_name or "body" in lower_name:
                 return "skin"
+
             if "airway" in lower_name or "trachea" in lower_name or "bronch" in lower_name:
                 return "Airways"
 
-            bone_keywords = [
-                "rib", "vertebra", "sternum", "clavicula", "scapula", "sacrum",
-                "humerus", "femur", "hip", "fibula", "tibia", "ulna", "radius",
-                "skull", "patella", "bone", "clavicle", "costal"
-            ]
-            if any(b in lower_name for b in bone_keywords):
-                return "Bones"
+            # -------------------------------
+            # OSSA SEPARATE IN SOTTOGRUPPI
+            # -------------------------------
 
-            # Vasi polmonari: segmenti da task lung_vessels + terminologia polmonare classica
-            # 1. Vene Polmonari (Blu)
-            vein_keywords = ["lung veins", "pulmonary venous system", "pulmonary vein", "pulmonary veins"]
+            # Coste
+            if (
+                "rib" in lower_name
+                or "costal" in lower_name
+            ):
+                return "Ribs"
+
+            # Colonna vertebrale
+            if (
+                "vertebra" in lower_name
+                or "spine" in lower_name
+                or "sacrum" in lower_name
+            ):
+                return "Spine"
+
+            # Sterno
+            if "sternum" in lower_name:
+                return "Sternum"
+
+            # Clavicole e scapole
+            if (
+                "clavicula" in lower_name
+                or "clavicle" in lower_name
+                or "scapula" in lower_name
+            ):
+                return "ClaviclesScapulae"
+
+            # Altre ossa eventuali
+            other_bone_keywords = [
+                "humerus", "femur", "hip", "fibula", "tibia",
+                "ulna", "radius", "skull", "patella", "bone"
+            ]
+
+            if any(b in lower_name for b in other_bone_keywords):
+                return "BonesOther"
+
+            # -------------------------------
+            # VASI
+            # -------------------------------
+
+            vein_keywords = [
+                "lung veins",
+                "pulmonary venous system",
+                "pulmonary vein",
+                "pulmonary veins"
+            ]
+
             if any(k in lower_name for k in vein_keywords):
                 return "PulmonaryVeins"
 
-            # 2. Arterie Polmonari (Rosse)
-            artery_keywords = ["lung arteries", "pulmonary artery", "pulmonary arteries"]
+            artery_keywords = [
+                "lung arteries",
+                "pulmonary artery",
+                "pulmonary arteries"
+            ]
+
             if any(k in lower_name for k in artery_keywords):
                 return "PulmonaryArteries"
 
-            # Esempio: cuore + grandi vasi sistemici in blocco unico
-            # cardio_keywords = [
-            #     "heart", "myocard", "atrium", "ventricle", "cardiac",
-            #     "aorta", "vena cava", "brachiocephalic", "subclavian",
-            #     "carotid", "iliac", "portal vein", "jugular"
-            # ]
-            # if any(k in lower_name for k in cardio_keywords):
-            #     return "CardioVascular"
-
             if "nodule" in lower_name:
                 return "nodule"
+
             if "lung" in lower_name:
                 return "Lung"
 
-            # fallback: separato
             return lower_name.replace(" ", "_")
 
         def _children_set(folderItemId):
@@ -1012,10 +1050,28 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                         tempModel = shNode.GetItemDataNode(itemId)
                         if tempModel and tempModel.IsA("vtkMRMLModelNode"):
                             # --- DECIMAZIONE ---
-                            # Riduciamo i poligoni dell'85% (rimane il 15% della geometria originale)
-                            self.addLog(f"Decimazione di {segmentName} in corso...")
-                            self.logic.decimate(tempModel, tempModel, reductionFactor=0.85, decimateBoundary=True)
-                            # -------------------
+                            category = get_clean_category(segmentName)
+
+                            if category in ["Ribs", "Spine", "Sternum", "ClaviclesScapulae"]:
+                                reduction = 0.60
+                            elif category in ["PulmonaryArteries", "PulmonaryVeins", "Airways"]:
+                                reduction = 0.55
+                            elif category == "Lung":
+                                reduction = 0.80
+                            else:
+                                reduction = 0.75
+
+                            self.addLog(
+                                f"Decimazione di {segmentName} → gruppo {category}, reduction={reduction}"
+                            )
+
+                            self.logic.decimate(
+                                tempModel,
+                                tempModel,
+                                reductionFactor=reduction,
+                                decimateBoundary=True
+                            )
+
                             process_node(tempModel, segmentName, segmentColor)
                             
                             # --- MODIFICA QUI ---
