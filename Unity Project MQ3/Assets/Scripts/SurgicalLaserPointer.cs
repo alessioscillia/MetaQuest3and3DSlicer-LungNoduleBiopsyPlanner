@@ -24,7 +24,21 @@ public class SurgicalLaserPointer : MonoBehaviour
     [Header("Calcolo Distanze")]
     public LayerMask skinLayer;
     public LayerMask pleuraLayer;
-    public TextMeshProUGUI distanceTextUI; 
+    public TextMeshProUGUI distanceTextUI;
+    
+    [Header("Trajectory Confirmation")]
+    public float skinEntryMarkerDiameter = 0.01f;
+    public float skinEntryLabelFontSize = 0.035f;
+    public float skinEntryLabelOffsetRight = 0.04f;
+    public float skinEntryLabelOffsetUp = 0.025f;
+    public Color skinEntryColor = Color.red;
+
+    private GameObject skinEntryMarkerInstance;
+    private TextMeshPro skinEntryLabelInstance;
+    private bool trajectoryConfirmed = false;
+
+    public bool TrajectoryConfirmed => trajectoryConfirmed;
+    public Vector3 ConfirmedSkinEntryPoint { get; private set; }
 
     private LineRenderer lineRenderer;
     private Grabbable oculusGrabbable;
@@ -37,6 +51,8 @@ public class SurgicalLaserPointer : MonoBehaviour
     void Awake()
     {
         lineRenderer = GetComponent<LineRenderer>();
+        oculusGrabbable = GetComponent<Grabbable>();
+
         lineRenderer.startWidth = lineWidth;
         lineRenderer.endWidth = lineWidth;
         lineRenderer.positionCount = 2;
@@ -83,6 +99,10 @@ public class SurgicalLaserPointer : MonoBehaviour
         Vector3 direction = transform.forward;
         lineRenderer.SetPosition(0, origin);
 
+        // La traiettoria deve essere rivalutata a ogni frame.
+        // Evita che rimanga true da un frame precedente.
+        TrajectoryDefined = false;
+
         bool skinHitDetected = false;
         Vector3 skinHitPoint = origin;
         Vector3 skinHitNormal = -direction; 
@@ -105,7 +125,8 @@ public class SurgicalLaserPointer : MonoBehaviour
             if (hitName.Contains("nodule"))
             {
                 hitNodule          = true;
-                NoduleHitPoint     = hit.point;           
+                NoduleHitPoint     = hit.point;   
+                // Traiettoria valida solo se colpisce un nodulo e abbiamo un punto di ingresso sulla pelle      
                 TrajectoryDefined  = skinHitDetected;
                 
                 if (distanceTextUI != null)
@@ -149,20 +170,26 @@ public class SurgicalLaserPointer : MonoBehaviour
 
         if (reticleInstance != null)
         {
-            reticleInstance.SetActive(true);
-            
-            if (skinHitDetected)
+            // Dopo la conferma della traiettoria, il mirino deve sparire.
+            reticleInstance.SetActive(!trajectoryConfirmed);
+
+            if (!trajectoryConfirmed)
             {
-                float offset = 0.005f; 
-                reticleInstance.transform.position = skinHitPoint + (skinHitNormal * offset);
-                reticleInstance.transform.rotation = Quaternion.LookRotation(-skinHitNormal);
-            }
-            else
-            {
-                reticleInstance.transform.position = origin + (direction * maxDistance);
-                reticleInstance.transform.rotation = Quaternion.LookRotation(-direction); 
+                if (skinHitDetected)
+                {
+                    float offset = 0.005f; 
+                    reticleInstance.transform.position = skinHitPoint + (skinHitNormal * offset);
+                    reticleInstance.transform.rotation = Quaternion.LookRotation(-skinHitNormal);
+                }
+                else
+                {
+                    reticleInstance.transform.position = origin + (direction * maxDistance);
+                    reticleInstance.transform.rotation = Quaternion.LookRotation(-direction); 
+                }
             }
         }
+
+        UpdateSkinEntryLabelBillboard();
 
         if (hitNodule) SetColor(targetHitColor);
         else SetColor(normalColor);
@@ -212,5 +239,147 @@ public class SurgicalLaserPointer : MonoBehaviour
         if (oculusGrabbable != null) oculusGrabbable.enabled = true;
         Collider col = GetComponent<Collider>();
         if (col != null) col.enabled = true;
+    }
+    public bool ConfirmCurrentTrajectory()
+    {
+        if (!TrajectoryDefined)
+        {
+            Debug.LogWarning("[SurgicalLaserPointer] Impossibile confermare: la traiettoria corrente non è valida.");
+            return false;
+        }
+
+        trajectoryConfirmed = true;
+        ConfirmedSkinEntryPoint = SkinHitPoint;
+
+        CreateOrUpdateSkinEntryMarker(ConfirmedSkinEntryPoint);
+
+        if (reticleInstance != null)
+            reticleInstance.SetActive(false);
+
+        Debug.Log($"[SurgicalLaserPointer] Traiettoria confermata. SkinEntryPoint = {ConfirmedSkinEntryPoint}");
+
+        return true;
+    }
+
+    public void ClearConfirmedTrajectory()
+    {
+        trajectoryConfirmed = false;
+
+        if (skinEntryMarkerInstance != null)
+        {
+            Destroy(skinEntryMarkerInstance);
+            skinEntryMarkerInstance = null;
+        }
+
+        if (skinEntryLabelInstance != null)
+        {
+            Destroy(skinEntryLabelInstance.gameObject);
+            skinEntryLabelInstance = null;
+        }
+
+        if (reticleInstance != null)
+            reticleInstance.SetActive(true);
+    }
+
+    private void CreateOrUpdateSkinEntryMarker(Vector3 worldPosition)
+    {
+        if (skinEntryMarkerInstance == null)
+        {
+            skinEntryMarkerInstance = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            skinEntryMarkerInstance.name = "SkinEntryPoint_Marker";
+
+            Collider markerCollider = skinEntryMarkerInstance.GetComponent<Collider>();
+            if (markerCollider != null)
+                Destroy(markerCollider);
+
+            Renderer markerRenderer = skinEntryMarkerInstance.GetComponent<Renderer>();
+            if (markerRenderer != null)
+            {
+                Material markerMat = CreateVisibleRedMaterial();
+                markerRenderer.material = markerMat;
+            }
+        }
+
+        skinEntryMarkerInstance.transform.position = worldPosition;
+        skinEntryMarkerInstance.transform.localScale = Vector3.one * skinEntryMarkerDiameter;
+
+        if (skinEntryLabelInstance == null)
+        {
+            GameObject labelObject = new GameObject("SkinEntryPoint_Label");
+            skinEntryLabelInstance = labelObject.AddComponent<TextMeshPro>();
+
+            skinEntryLabelInstance.text = "SkinEntryPoint";
+            skinEntryLabelInstance.color = skinEntryColor;
+            skinEntryLabelInstance.fontSize = skinEntryLabelFontSize;
+            skinEntryLabelInstance.alignment = TextAlignmentOptions.Left;
+            skinEntryLabelInstance.enableWordWrapping = false;
+
+            Renderer labelRenderer = skinEntryLabelInstance.GetComponent<Renderer>();
+            if (labelRenderer != null && labelRenderer.material != null)
+            {
+                labelRenderer.material.renderQueue = 4001;
+            }
+        }
+
+        UpdateSkinEntryLabelBillboard();
+    }
+
+    private Material CreateVisibleRedMaterial()
+    {
+        Shader shader = Shader.Find("Universal Render Pipeline/Unlit");
+
+        if (shader == null)
+            shader = Shader.Find("Unlit/Color");
+
+        if (shader == null)
+            shader = Shader.Find("Standard");
+
+        Material mat = new Material(shader);
+        mat.renderQueue = 4000;
+
+        if (mat.HasProperty("_BaseColor"))
+            mat.SetColor("_BaseColor", skinEntryColor);
+        else if (mat.HasProperty("_Color"))
+            mat.SetColor("_Color", skinEntryColor);
+        else
+            mat.color = skinEntryColor;
+
+        // Proviamo a renderizzarla sempre visibile sopra il modello.
+        if (mat.HasProperty("_ZTest"))
+            mat.SetInt("_ZTest", (int)UnityEngine.Rendering.CompareFunction.Always);
+
+        if (mat.HasProperty("_ZWrite"))
+            mat.SetInt("_ZWrite", 0);
+
+        return mat;
+    }
+
+    private void UpdateSkinEntryLabelBillboard()
+    {
+        if (!trajectoryConfirmed || skinEntryLabelInstance == null)
+            return;
+
+        Camera cam = Camera.main;
+
+        Vector3 labelPosition = ConfirmedSkinEntryPoint;
+
+        if (cam != null)
+        {
+            labelPosition += cam.transform.right * skinEntryLabelOffsetRight;
+            labelPosition += cam.transform.up * skinEntryLabelOffsetUp;
+
+            skinEntryLabelInstance.transform.position = labelPosition;
+
+            Vector3 directionToCamera = skinEntryLabelInstance.transform.position - cam.transform.position;
+            if (directionToCamera.sqrMagnitude > 0.0001f)
+            {
+                skinEntryLabelInstance.transform.rotation = Quaternion.LookRotation(directionToCamera);
+            }
+        }
+        else
+        {
+            skinEntryLabelInstance.transform.position =
+                ConfirmedSkinEntryPoint + new Vector3(0.04f, 0.025f, 0f);
+        }
     }
 }

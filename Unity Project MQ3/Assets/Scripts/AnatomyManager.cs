@@ -87,6 +87,11 @@ public class AnatomyManager : MonoBehaviour
     [Range(0f, 1f)] [SerializeField] private float awVesselsOpacity = 1f;
     [Range(0f, 1f)] [SerializeField] private float tsMasterOpacity = 1f;
 
+    [Header("Trajectory Confirmation")]
+    [SerializeField] private Toggle trajectoryConfirmedToggle;
+
+    private bool _suppressTrajectoryConfirmedToggleCallback = false;
+
     private bool isTSVisible;
 
     [Header("Laser Pointer System")]
@@ -119,6 +124,8 @@ public class AnatomyManager : MonoBehaviour
         }
         
         UpdateTrackingButtonVisual(true);
+
+        SetTrajectoryConfirmedToggleWithoutNotify(false);
 
         InitializeOpacitySliders();
 
@@ -857,10 +864,9 @@ public class AnatomyManager : MonoBehaviour
 
         if (!laserPointer.gameObject.activeSelf)
         {
-            /*
-            * Needle OFF -> ON
-            * Accendo laser e sfera.
-            */
+            laserPointer.ClearConfirmedTrajectory();
+            SetTrajectoryConfirmedToggleWithoutNotify(false);
+
             laserPointer.gameObject.SetActive(true);
             SpawnLaserInFrontOfUser();
 
@@ -870,10 +876,9 @@ public class AnatomyManager : MonoBehaviour
         }
         else
         {
-            /*
-            * Needle ON -> OFF
-            * Spengo laser e sfera.
-            */
+            laserPointer.ClearConfirmedTrajectory();
+            SetTrajectoryConfirmedToggleWithoutNotify(false);
+
             SetSphereVisible(false);
 
             laserPointer.gameObject.SetActive(false);
@@ -897,6 +902,53 @@ public class AnatomyManager : MonoBehaviour
         else
         {
             SetSphereVisible(false);
+        }
+    }
+    private void SetTrajectoryConfirmedToggleWithoutNotify(bool isOn)
+    {
+        _suppressTrajectoryConfirmedToggleCallback = true;
+
+        if (trajectoryConfirmedToggle != null)
+            trajectoryConfirmedToggle.SetIsOnWithoutNotify(isOn);
+
+        _suppressTrajectoryConfirmedToggleCallback = false;
+    }
+
+    public void OnTrajectoryConfirmedToggleChanged(bool isOn)
+    {
+        if (_suppressTrajectoryConfirmedToggleCallback)
+            return;
+
+        if (laserPointer == null)
+        {
+            SetTrajectoryConfirmedToggleWithoutNotify(false);
+            return;
+        }
+
+        if (isOn)
+        {
+            /*
+            * L'utente sta spuntando "Trajectory Confirmed".
+            * Confermiamo solo se la traiettoria corrente è valida.
+            */
+            bool confirmed = laserPointer.ConfirmCurrentTrajectory();
+
+            if (!confirmed)
+            {
+                /*
+                * Se il laser non sta colpendo correttamente il nodulo,
+                * il toggle torna automaticamente OFF.
+                */
+                SetTrajectoryConfirmedToggleWithoutNotify(false);
+            }
+        }
+        else
+        {
+            /*
+            * L'utente ha tolto la spunta.
+            * Rimuoviamo il marker SkinEntryPoint e facciamo tornare il mirino.
+            */
+            laserPointer.ClearConfirmedTrajectory();
         }
     }
 
