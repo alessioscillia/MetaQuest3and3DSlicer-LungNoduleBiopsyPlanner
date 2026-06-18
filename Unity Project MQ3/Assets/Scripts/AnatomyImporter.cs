@@ -252,6 +252,14 @@ public class AnatomyImporter : MonoBehaviour
         {
             string objName = rend.gameObject.name;
             string lower = objName.ToLowerInvariant();
+            MeshFilter mf = rend.GetComponent<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null)
+            {
+                Debug.Log(
+                    $"[AnatomyImporter] Renderer object='{objName}', " +
+                    $"mesh='{mf.sharedMesh.name}', vertices={mf.sharedMesh.vertexCount}"
+                );
+            }
 
             Material mat = null;
             if (rend.sharedMaterial != null)

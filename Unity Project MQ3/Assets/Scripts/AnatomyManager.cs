@@ -15,6 +15,8 @@ public class AnatomyManager : MonoBehaviour
     private System.Collections.Generic.List<Renderer> boneRenderers =
     new System.Collections.Generic.List<Renderer>();
     [SerializeField] private Renderer vesselsRenderer;
+    private System.Collections.Generic.List<Renderer> airwayRenderers =
+    new System.Collections.Generic.List<Renderer>();
     [SerializeField] private Renderer airwaysRenderer;
     [SerializeField] private Renderer noduleRenderer;
     [SerializeField] private Renderer toolRenderer;
@@ -177,6 +179,90 @@ public class AnatomyManager : MonoBehaviour
             || lowerName.Contains("shoulder");
     }
 
+    private bool HasValidMesh(Renderer rend)
+    {
+        if (rend == null) return false;
+
+        MeshFilter mf = rend.GetComponent<MeshFilter>();
+        if (mf == null || mf.sharedMesh == null) return false;
+
+        Mesh mesh = mf.sharedMesh;
+        Vector3[] vertices = mesh.vertices;
+
+        if (vertices == null || vertices.Length == 0) return false;
+
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            Vector3 v = vertices[i];
+
+            if (float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z))
+            {
+                Debug.LogError(
+                    $"[AnatomyManager] Mesh non valida su '{rend.gameObject.name}', " +
+                    $"mesh='{mesh.name}', vertex index={i}, value={v}. Collider non creato."
+                );
+                return false;
+            }
+        }
+
+        Bounds b = mesh.bounds;
+
+        if (float.IsNaN(b.center.x) || float.IsNaN(b.center.y) || float.IsNaN(b.center.z) ||
+            float.IsNaN(b.size.x) || float.IsNaN(b.size.y) || float.IsNaN(b.size.z))
+        {
+            Debug.LogError(
+                $"[AnatomyManager] Bounds non validi su '{rend.gameObject.name}', mesh='{mesh.name}'."
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    private MeshCollider TryAddMeshCollider(Renderer rend, bool convex, string layerName)
+    {
+        if (rend == null) return null;
+
+        if (!HasValidMesh(rend))
+            return null;
+
+        MeshFilter meshFilter = rend.GetComponent<MeshFilter>();
+        if (meshFilter == null || meshFilter.sharedMesh == null)
+            return null;
+
+        string colliderName = rend.gameObject.name + "_Collider";
+
+        Transform existingChild = rend.transform.Find(colliderName);
+        if (existingChild != null)
+        {
+            MeshCollider existingCollider = existingChild.GetComponent<MeshCollider>();
+            if (existingCollider != null)
+                return existingCollider;
+        }
+
+        GameObject colliderObject = new GameObject(colliderName);
+        colliderObject.transform.SetParent(rend.transform, false);
+        colliderObject.transform.localPosition = Vector3.zero;
+        colliderObject.transform.localRotation = Quaternion.identity;
+        colliderObject.transform.localScale = Vector3.one;
+
+        int layer = LayerMask.NameToLayer(layerName);
+        if (layer >= 0)
+            colliderObject.layer = layer;
+
+        MeshCollider meshCollider = colliderObject.AddComponent<MeshCollider>();
+
+        // Disattiva Fast Midphase prima di assegnare la mesh.
+        meshCollider.cookingOptions =
+            meshCollider.cookingOptions & ~MeshColliderCookingOptions.UseFastMidphase;
+
+        meshCollider.sharedMesh = meshFilter.sharedMesh;
+        meshCollider.convex = convex;
+
+        return meshCollider;
+    }
+
     public void RegisterOrganRenderer(string objName, Renderer rend)
     {
         string lowerName = objName.ToLower();
@@ -187,9 +273,7 @@ public class AnatomyManager : MonoBehaviour
 
             if (skinRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = skinRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false; 
+                TryAddMeshCollider(rend, false, "SkinLayer");
             }
 
             skinRenderer.gameObject.layer = LayerMask.NameToLayer("SkinLayer");
@@ -208,9 +292,7 @@ public class AnatomyManager : MonoBehaviour
             lungRenderer = rend;
             if (lungRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = lungRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false; 
+                TryAddMeshCollider(rend, false, "PleuraLayer");
             }
             lungRenderer.gameObject.layer = LayerMask.NameToLayer("PleuraLayer"); 
         }
@@ -226,9 +308,7 @@ public class AnatomyManager : MonoBehaviour
 
             if (rend.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = rend.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false; 
+                TryAddMeshCollider(rend, false, "Obstacle");
             }
 
             rend.gameObject.layer = LayerMask.NameToLayer("Obstacle"); 
@@ -238,9 +318,7 @@ public class AnatomyManager : MonoBehaviour
             vesselsRenderer = rend;
             if (vesselsRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = vesselsRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false;
+                TryAddMeshCollider(rend, false, "Obstacle");
             }
             vesselsRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
@@ -249,9 +327,7 @@ public class AnatomyManager : MonoBehaviour
             arteriesRenderer = rend;
             if (arteriesRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = arteriesRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false;
+                TryAddMeshCollider(rend, false, "Obstacle");
             }
             arteriesRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
@@ -260,24 +336,36 @@ public class AnatomyManager : MonoBehaviour
             veinsRenderer = rend;
             if (veinsRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = veinsRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false;
+                TryAddMeshCollider(rend, false, "Obstacle");
+                
             }
             veinsRenderer.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
-        else if (lowerName.Contains("airways") || lowerName.Contains("trachea")) 
+        else if (
+            lowerName.Contains("airways") ||
+            lowerName.Contains("airway") ||
+            lowerName.Contains("trachea") ||
+            lowerName.Contains("bronch"))
         {
-            airwaysRenderer = rend;
+            if (airwaysRenderer == null)
+                airwaysRenderer = rend;
+
+            if (!airwayRenderers.Contains(rend))
+                airwayRenderers.Add(rend);
+
+            if (rend.gameObject.GetComponent<Collider>() == null)
+            {
+                TryAddMeshCollider(rend, false, "Obstacle");
+            }
+
+            rend.gameObject.layer = LayerMask.NameToLayer("Obstacle");
         }
         else if (lowerName.Contains("nodule"))
         {
             noduleRenderer = rend;
             if (noduleRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = noduleRenderer.gameObject.AddComponent<MeshCollider>();
-                DisableFastMidphaseIfAvailable(mc);
-                mc.convex = false;
+                TryAddMeshCollider(rend, false, "Nodule");
             }
             noduleRenderer.gameObject.layer = LayerMask.NameToLayer("Nodule");
         }
@@ -286,8 +374,7 @@ public class AnatomyManager : MonoBehaviour
             toolRenderer = rend;
             if (toolRenderer.gameObject.GetComponent<Collider>() == null)
             {
-                MeshCollider mc = toolRenderer.gameObject.AddComponent<MeshCollider>();
-                mc.convex = true; 
+                TryAddMeshCollider(rend, true, "ToolLayer");
             }
             toolRenderer.enabled = false;
         }
@@ -493,6 +580,35 @@ public class AnatomyManager : MonoBehaviour
         if (!any && bonesRenderer != null)
             SetOpacity(bonesRenderer, opacity);
     }
+    private void SetAirwayRenderersEnabled(bool isVisible)
+    {
+        bool any = false;
+
+        foreach (Renderer rend in airwayRenderers)
+        {
+            if (rend == null) continue;
+            rend.enabled = isVisible;
+            any = true;
+        }
+
+        if (!any && airwaysRenderer != null)
+            airwaysRenderer.enabled = isVisible;
+    }
+
+    private void SetAirwayRenderersOpacity(float opacity)
+    {
+        bool any = false;
+
+        foreach (Renderer rend in airwayRenderers)
+        {
+            if (rend == null) continue;
+            SetOpacity(rend, opacity);
+            any = true;
+        }
+
+        if (!any && airwaysRenderer != null)
+            SetOpacity(airwaysRenderer, opacity);
+    }
     
     public void UpdateSkinOpacity(float value)
     {
@@ -517,7 +633,7 @@ public class AnatomyManager : MonoBehaviour
         SetOpacity(vesselsRenderer, effectiveOpacity);
         SetOpacity(arteriesRenderer, effectiveOpacity);
         SetOpacity(veinsRenderer, effectiveOpacity);    
-        SetOpacity(airwaysRenderer, effectiveOpacity);
+        SetAirwayRenderersOpacity(effectiveOpacity);
     }
     
     public void UpdateTSOpacity(float value)
@@ -537,7 +653,7 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(lungRenderer, tsMasterOpacity);
             SetBoneRenderersOpacity(tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
-            SetOpacity(airwaysRenderer, tsMasterOpacity);
+            SetAirwayRenderersOpacity(tsMasterOpacity);
             SetOpacity(arteriesRenderer, tsMasterOpacity);
             SetOpacity(veinsRenderer, tsMasterOpacity);
         }
@@ -570,7 +686,7 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(lungRenderer, tsMasterOpacity);
             SetBoneRenderersOpacity(tsMasterOpacity);
             SetOpacity(vesselsRenderer, tsMasterOpacity);
-            SetOpacity(airwaysRenderer, tsMasterOpacity);
+            SetAirwayRenderersOpacity(tsMasterOpacity);
             SetOpacity(arteriesRenderer, tsMasterOpacity); 
             SetOpacity(veinsRenderer, tsMasterOpacity);    
             
@@ -620,7 +736,7 @@ public class AnatomyManager : MonoBehaviour
         if (vesselsRenderer) vesselsRenderer.enabled = isVisible; 
         if (arteriesRenderer) arteriesRenderer.enabled = isVisible; 
         if (veinsRenderer) veinsRenderer.enabled = isVisible;       
-        if (airwaysRenderer) airwaysRenderer.enabled = isVisible; 
+        SetAirwayRenderersEnabled(isVisible); 
         
         // AGGIUNTO: Quando accendi i vasi, applica subito l'opacità e la configurazione corretta
         if (isVisible)
@@ -629,7 +745,7 @@ public class AnatomyManager : MonoBehaviour
             SetOpacity(vesselsRenderer, effectiveOpacity);
             SetOpacity(arteriesRenderer, effectiveOpacity);
             SetOpacity(veinsRenderer, effectiveOpacity);
-            SetOpacity(airwaysRenderer, effectiveOpacity);
+            SetAirwayRenderersOpacity(effectiveOpacity);
         }
 
         if (awVesselsToggleText) awVesselsToggleText.text = isVisible ? "AWVessels ON" : "AWVessels OFF"; 
@@ -768,7 +884,170 @@ public class AnatomyManager : MonoBehaviour
     }
 
     private Rigidbody EnsureModelRigidbody(GameObject modelRoot) { Rigidbody rb = modelRoot.GetComponent<Rigidbody>(); if (rb == null) rb = modelRoot.AddComponent<Rigidbody>(); rb.useGravity = false; rb.isKinematic = true; return rb; }
-    private Bounds CalculateHierarchyBounds(GameObject root) { Renderer[] renderers = root.GetComponentsInChildren<Renderer>(); if (renderers.Length == 0) return new Bounds(root.transform.position, Vector3.one * 0.1f); Bounds bounds = renderers[0].bounds; for (int i = 1; i < renderers.Length; i++) bounds.Encapsulate(renderers[i].bounds); return bounds; }
+    private const float MaxReasonableModelSizeMeters = 10f;
+    private const float MaxReasonableDistanceFromOriginMeters = 100f;
+
+    private Bounds CalculateHierarchyBounds(GameObject root)
+    {
+        /*
+        * Questo bounds serve solo per il BoxCollider globale del modello,
+        * usato per Modify/Fix Model.
+        *
+        * Per questo motivo è molto meglio usare la skin, se disponibile,
+        * invece di includere tutti i renderer interni come Airways, vasi, ecc.
+        */
+
+        if (skinRenderer != null)
+        {
+            MeshFilter skinMeshFilter = skinRenderer.GetComponent<MeshFilter>();
+
+            if (TryGetWorldBoundsFromMeshFilter(
+                    skinMeshFilter,
+                    out Bounds skinBounds,
+                    "skinRenderer"))
+            {
+                return skinBounds;
+            }
+        }
+
+        /*
+        * Fallback robusto:
+        * calcola i bounds dai MeshFilter, non dai Renderer.bounds,
+        * così evitiamo l'errore Invalid worldAABB.
+        */
+
+        MeshFilter[] meshFilters = root.GetComponentsInChildren<MeshFilter>(true);
+
+        bool hasValidBounds = false;
+        Bounds combinedBounds = new Bounds(root.transform.position, Vector3.zero);
+
+        foreach (MeshFilter meshFilter in meshFilters)
+        {
+            if (!TryGetWorldBoundsFromMeshFilter(
+                    meshFilter,
+                    out Bounds currentBounds,
+                    meshFilter != null ? meshFilter.gameObject.name : "NULL"))
+            {
+                continue;
+            }
+
+            if (!hasValidBounds)
+            {
+                combinedBounds = currentBounds;
+                hasValidBounds = true;
+            }
+            else
+            {
+                combinedBounds.Encapsulate(currentBounds);
+            }
+        }
+
+        if (!hasValidBounds)
+        {
+            Debug.LogWarning("[AnatomyManager] Nessun bounds valido trovato. Uso bounds di fallback.");
+            return new Bounds(root.transform.position, Vector3.one * 0.2f);
+        }
+
+        return combinedBounds;
+    }
+
+    private bool TryGetWorldBoundsFromMeshFilter(
+        MeshFilter meshFilter,
+        out Bounds worldBounds,
+        string debugName)
+    {
+        worldBounds = default;
+
+        if (meshFilter == null || meshFilter.sharedMesh == null)
+            return false;
+
+        Mesh mesh = meshFilter.sharedMesh;
+
+        if (mesh.vertexCount == 0)
+            return false;
+
+        Bounds localBounds = mesh.bounds;
+
+        if (!IsFiniteVector(localBounds.center) || !IsFiniteVector(localBounds.size))
+        {
+            Debug.LogWarning($"[AnatomyManager] Bounds locali non validi su '{debugName}'. Mesh ignorata.");
+            return false;
+        }
+
+        Vector3 min = localBounds.min;
+        Vector3 max = localBounds.max;
+
+        Vector3[] corners = new Vector3[8]
+        {
+            new Vector3(min.x, min.y, min.z),
+            new Vector3(max.x, min.y, min.z),
+            new Vector3(min.x, max.y, min.z),
+            new Vector3(max.x, max.y, min.z),
+            new Vector3(min.x, min.y, max.z),
+            new Vector3(max.x, min.y, max.z),
+            new Vector3(min.x, max.y, max.z),
+            new Vector3(max.x, max.y, max.z)
+        };
+
+        bool initialized = false;
+
+        foreach (Vector3 corner in corners)
+        {
+            Vector3 worldCorner = meshFilter.transform.TransformPoint(corner);
+
+            if (!IsFiniteVector(worldCorner))
+            {
+                Debug.LogWarning($"[AnatomyManager] Vertice bounds non valido su '{debugName}'. Mesh ignorata.");
+                return false;
+            }
+
+            if (!initialized)
+            {
+                worldBounds = new Bounds(worldCorner, Vector3.zero);
+                initialized = true;
+            }
+            else
+            {
+                worldBounds.Encapsulate(worldCorner);
+            }
+        }
+
+        if (!IsReasonableWorldBounds(worldBounds))
+        {
+            Debug.LogWarning(
+                $"[AnatomyManager] Bounds sospetti su '{debugName}'. " +
+                $"Center={worldBounds.center}, Size={worldBounds.size}. Mesh ignorata dal collider globale."
+            );
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool IsFiniteVector(Vector3 v)
+    {
+        return !(float.IsNaN(v.x) || float.IsNaN(v.y) || float.IsNaN(v.z) ||
+                float.IsInfinity(v.x) || float.IsInfinity(v.y) || float.IsInfinity(v.z));
+    }
+
+    private bool IsReasonableWorldBounds(Bounds bounds)
+    {
+        if (!IsFiniteVector(bounds.center) || !IsFiniteVector(bounds.size))
+            return false;
+
+        if (bounds.size.x > MaxReasonableModelSizeMeters ||
+            bounds.size.y > MaxReasonableModelSizeMeters ||
+            bounds.size.z > MaxReasonableModelSizeMeters)
+            return false;
+
+        if (Mathf.Abs(bounds.center.x) > MaxReasonableDistanceFromOriginMeters ||
+            Mathf.Abs(bounds.center.y) > MaxReasonableDistanceFromOriginMeters ||
+            Mathf.Abs(bounds.center.z) > MaxReasonableDistanceFromOriginMeters)
+            return false;
+
+        return true;
+    }
     private T EnsureComponent<T>(GameObject target) where T : Component { T comp = target.GetComponent<T>(); if (comp == null) comp = target.AddComponent<T>(); return comp; }
     
     private void WireRayGrabComponents(GameObject rayGrabRoot, Collider modelCollider, Grabbable modelGrabbable) { RayInteractable rayInteractable = EnsureComponent<RayInteractable>(rayGrabRoot); MoveFromTargetProvider moveFromTargetProvider = EnsureComponent<MoveFromTargetProvider>(rayGrabRoot); ColliderSurface colliderSurface = EnsureComponent<ColliderSurface>(rayGrabRoot); ConfigureColliderSurface(colliderSurface, modelCollider); ConfigureRayInteractable(rayInteractable, modelGrabbable, colliderSurface, moveFromTargetProvider); }

@@ -180,26 +180,44 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
     def onWebServerToggled(self, checked):
         if checked:
             directory = self.lastExportDirectory
-            # Se non hai ancora esportato nulla, chiedi quale cartella servire
+
+            # Se non c'è una cartella salvata, chiedi quale cartella servire
             if not directory:
-                directory = qt.QFileDialog.getExistingDirectory(slicer.util.mainWindow(), "Select directory containing model.gltf")
+                startDir = ""
+                if self.lastExportDirectory and os.path.isdir(self.lastExportDirectory):
+                    startDir = self.lastExportDirectory
+
+                directory = qt.QFileDialog.getExistingDirectory(
+                    slicer.util.mainWindow(),
+                    "Select directory containing model.glb",
+                    startDir
+                )
+
                 if not directory:
                     self.webServerButton.setChecked(False)
                     return
+
                 self.lastExportDirectory = directory
-            
+
             try:
                 port = 8080
                 self.logic.startWebServer(directory, port=port)
                 self.addLog(f"Web server started on port {port} at: {directory}")
                 self.webServerButton.text = "Stop Web Server (Port 8080)"
+
             except Exception as e:
                 slicer.util.errorDisplay(f"Failed to start web server: {str(e)}")
                 self.webServerButton.setChecked(False)
+
         else:
             self.logic.stopWebServer()
             self.addLog("Web server stopped.")
             self.webServerButton.text = "Start Web Server"
+
+            # FONDAMENTALE:
+            # resettiamo la cartella, così al prossimo Start
+            # Slicer chiede di nuovo quale directory servire.
+            self.lastExportDirectory = None
 
 
     def initializeGUI(self):
@@ -821,6 +839,10 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
 
                 segmentName = segment.GetName() or ""
                 segmentNameLower = segmentName.lower()
+                # Evita di esportare airway wall: troppo pesante e spesso problematico in Unity.
+                if "airway wall" in segmentNameLower or "lung airways wall" in segmentNameLower:
+                    self.addLog(f"Skip export segment '{segmentName}' perché airway wall è troppo pesante/problematico.")
+                    continue
 
                 # Extra safety: skip obstacle-like segments even if node name is generic.
                 if "obstaclemodel" in segmentNameLower or "obstacle model" in segmentNameLower:
@@ -877,7 +899,19 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             if "skin" in lower_name or "body" in lower_name:
                 return "skin"
 
-            if "airway" in lower_name or "trachea" in lower_name or "bronch" in lower_name:
+            if "trachea and bronchus" in lower_name:
+                return "Bronchi"
+
+            if "bronch" in lower_name:
+                return "Bronchi"
+
+            if "trachea" in lower_name:
+                return "Trachea"
+
+            if "airway wall" in lower_name or "lung airways wall" in lower_name:
+                return "AirwayWall"
+
+            if "airway" in lower_name:
                 return "Airways"
 
             # -------------------------------
@@ -989,15 +1023,73 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             if triPoly.GetNumberOfPoints() == 0:
                 return
 
-            verts = vtk_np.vtk_to_numpy(triPoly.GetPoints().GetData())
+            verts = vtk_np.vtk_to_numpy(triPoly.GetPoints().GetData()).astype(np.float64)
             polys_np = vtk_np.vtk_to_numpy(triPoly.GetPolys().GetData())
 
             if len(polys_np) > 0:
-                faces = polys_np.reshape(-1, 4)[:, 1:4]
+                faces = polys_np.reshape(-1, 4)[:, 1:4].astype(np.int64)
             else:
                 faces = np.empty((0, 3), dtype=np.int64)
 
+            # ---------------------------------------------------------
+            # CLEANING CRITICO: rimuove vertici NaN/Inf e facce invalide
+            # ---------------------------------------------------------
+
+            finite_vertices_mask = np.isfinite(verts).all(axis=1)
+
+            if not finite_vertices_mask.all():
+                n_bad = np.count_nonzero(~finite_vertices_mask)
+                self.addLog(
+                    f"WARNING: '{raw_name}' contiene {n_bad} vertici NaN/Inf. "
+                    "Verranno rimossi prima dell'export GLB."
+                )
+
+            if faces.size > 0:
+                valid_face_indices = (
+                    (faces[:, 0] >= 0) & (faces[:, 0] < len(verts)) &
+                    (faces[:, 1] >= 0) & (faces[:, 1] < len(verts)) &
+                    (faces[:, 2] >= 0) & (faces[:, 2] < len(verts))
+                )
+
+                faces = faces[valid_face_indices]
+
+                if faces.size > 0:
+                    valid_faces_mask = finite_vertices_mask[faces].all(axis=1)
+
+                    # Rimuove facce degeneri tipo [12, 12, 18]
+                    non_degenerate_mask = (
+                        (faces[:, 0] != faces[:, 1]) &
+                        (faces[:, 1] != faces[:, 2]) &
+                        (faces[:, 0] != faces[:, 2])
+                    )
+
+                    valid_faces_mask = valid_faces_mask & non_degenerate_mask
+                    faces = faces[valid_faces_mask]
+
+            # Se dopo la pulizia non resta geometria sufficiente, salta la mesh
+            if faces.size == 0:
+                self.addLog(f"WARNING: '{raw_name}' saltato: nessuna faccia valida dopo cleaning.")
+                return
+
+            # Tieni solo i vertici effettivamente usati dalle facce rimaste
+            used_vertex_indices = np.unique(faces.reshape(-1))
+            old_to_new = -np.ones(len(verts), dtype=np.int64)
+            old_to_new[used_vertex_indices] = np.arange(len(used_vertex_indices))
+
+            verts = verts[used_vertex_indices]
+            faces = old_to_new[faces]
+
+            # Ulteriore controllo finale
+            if not np.isfinite(verts).all():
+                self.addLog(f"ERROR: '{raw_name}' contiene ancora NaN/Inf dopo cleaning. Mesh saltata.")
+                return
+
+            if len(verts) < 3 or len(faces) < 1:
+                self.addLog(f"WARNING: '{raw_name}' saltato: mesh troppo piccola dopo cleaning.")
+                return
+
             mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+            mesh.remove_unreferenced_vertices()
 
             # Se disponibile, applica colore importato da segmento/modello
             if rgb_color is not None:
@@ -1052,12 +1144,29 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                             # --- DECIMAZIONE ---
                             category = get_clean_category(segmentName)
 
-                            if category in ["Ribs", "Spine", "Sternum", "ClaviclesScapulae"]:
-                                reduction = 0.60
-                            elif category in ["PulmonaryArteries", "PulmonaryVeins", "Airways"]:
-                                reduction = 0.55
-                            elif category == "Lung":
+                            # Scommentare per modello non troppo decimato
+                            # if category in ["Ribs", "Spine", "Sternum", "ClaviclesScapulae"]:
+                            #     reduction = 0.60
+                            # elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
+                            #     reduction = 0.35
+                            # elif category in ["Airways", "Bronchi", "Trachea"]:
+                            #     reduction = 0.25
+                            # elif category == "Lung":
+                            #     reduction = 0.80
+                            # else:
+                            #     reduction = 0.75
+                            if category == "skin":
                                 reduction = 0.80
+                            elif category == "Lung":
+                                reduction = 0.90
+                            elif category == "Ribs":
+                                reduction = 0.75
+                            elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
+                                reduction = 0.75
+                            elif category in ["Trachea", "Bronchi", "Airways"]:
+                                reduction = 0.45
+                            elif category in ["Spine", "Sternum", "ClaviclesScapulae"]:
+                                reduction = 0.65
                             else:
                                 reduction = 0.75
 
@@ -1265,28 +1374,26 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
         """
         Ensure parameter node exists and observed.
         """
-        # Parameter node stores all user choices in parameter values, node selections, etc.
-        # so that when the scene is saved and reloaded, these settings are restored.
-
         self.setParameterNode(self.logic.getParameterNode())
 
-        # Select default input nodes if nothing is selected yet to save a few clicks for the user
+        # Select default input node if nothing is selected yet
         if not self._parameterNode.GetNodeReference(self.logic.INPUT_VOLUME):
-                firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
-                if firstVolumeNode:
-                        self._parameterNode.SetNodeReferenceID(self.logic.INPUT_VOLUME, firstVolumeNode.GetID())
+            firstVolumeNode = slicer.mrmlScene.GetFirstNodeByClass("vtkMRMLScalarVolumeNode")
+            if firstVolumeNode:
+                self._parameterNode.SetNodeReferenceID(self.logic.INPUT_VOLUME, firstVolumeNode.GetID())
 
-        if not self._parameterNode.GetNodeReference(self.logic.WINDOW_WIDTH):
-                        self._parameterNode.SetNodeReferenceID(self.logic.WINDOW_WIDTH, "1000")                
+        # Default numerical parameters
+        if not self._parameterNode.GetParameter(self.logic.WINDOW_WIDTH):
+            self._parameterNode.SetParameter(self.logic.WINDOW_WIDTH, "1000")                
 
-        if not self._parameterNode.GetNodeReference(self.logic.WINDOW_LEVEL):
-                        self._parameterNode.SetNodeReferenceID(self.logic.WINDOW_LEVEL, "0")  
+        if not self._parameterNode.GetParameter(self.logic.WINDOW_LEVEL):
+            self._parameterNode.SetParameter(self.logic.WINDOW_LEVEL, "0")  
 
-        if not self._parameterNode.GetNodeReference(self.logic.IMAGE_HIST_SLIDEBAR_minLimit):
-                self._parameterNode.SetParameter(self.logic.IMAGE_HIST_SLIDEBAR_minLimit, "500")
+        if not self._parameterNode.GetParameter(self.logic.IMAGE_HIST_SLIDEBAR_minLimit):
+            self._parameterNode.SetParameter(self.logic.IMAGE_HIST_SLIDEBAR_minLimit, "500")
 
-        if not self._parameterNode.GetNodeReference(self.logic.IMAGE_HIST_SLIDEBAR_maxLimit):
-                self._parameterNode.SetParameter(self.logic.IMAGE_HIST_SLIDEBAR_maxLimit, "1500")
+        if not self._parameterNode.GetParameter(self.logic.IMAGE_HIST_SLIDEBAR_maxLimit):
+            self._parameterNode.SetParameter(self.logic.IMAGE_HIST_SLIDEBAR_maxLimit, "1500")
 
     def setParameterNode(self, inputParameterNode):
         """
@@ -1403,10 +1510,36 @@ class LungNoduleBiopsyPlannerLogic(ScriptedLoadableModuleLogic, VTKObservationMi
         
         # Variabile per tracciare il processo CMD in background
         self.server_process = None
+    def setDefaultParameters(self, parameterNode):
+        """
+        Set default values for module parameters.
+        This method is called when the parameter node is initialized.
+        """
+        if parameterNode is None:
+            return
+
+        if not parameterNode.GetParameter(self.INPUT_VOLUME_PATH):
+            parameterNode.SetParameter(self.INPUT_VOLUME_PATH, "")
+
+        if not parameterNode.GetParameter(self.IMAGE_HIST_SLIDEBAR_minLimit):
+            parameterNode.SetParameter(self.IMAGE_HIST_SLIDEBAR_minLimit, "500")
+
+        if not parameterNode.GetParameter(self.IMAGE_HIST_SLIDEBAR_maxLimit):
+            parameterNode.SetParameter(self.IMAGE_HIST_SLIDEBAR_maxLimit, "1500")
+
+        if not parameterNode.GetParameter(self.WINDOW_WIDTH):
+            parameterNode.SetParameter(self.WINDOW_WIDTH, "1000")
+
+        if not parameterNode.GetParameter(self.WINDOW_LEVEL):
+            parameterNode.SetParameter(self.WINDOW_LEVEL, "0")
+
+        if not parameterNode.GetParameter(self.ACTIVE_SERVER_CHECKBOX):
+            parameterNode.SetParameter(self.ACTIVE_SERVER_CHECKBOX, "false")
 
     def startWebServer(self, directory, port=8080):
         """Avvia il server HTTP aprendo un processo esterno separato, silenzioso e in background."""
         self.stopWebServer()  # Ferma eventuali server già attivi
+        self.killProcessUsingPort(port)
         
         try:
             # Cerchiamo l'eseguibile Python nativo di Slicer
@@ -1424,8 +1557,8 @@ class LungNoduleBiopsyPlannerLogic(ScriptedLoadableModuleLogic, VTKObservationMi
                 # Aggiungiamo --bind 127.0.0.1 per forzare l'uso di IPv4 (evita conflitti localhost)
                 [python_exe, "-m", "http.server", str(port), "--bind", "0.0.0.0"],
                 cwd=directory,
-                #stdout=subprocess.DEVNULL,  # <-- FIX CRITICO: Butta via i log standard
-                #stderr=subprocess.DEVNULL,  # <-- FIX CRITICO: Butta via i log di errore
+                stdout=subprocess.DEVNULL,  # <-- FIX CRITICO: Butta via i log standard
+                stderr=subprocess.DEVNULL,  # <-- FIX CRITICO: Butta via i log di errore
                 creationflags=creation_flags
             )
             return port
@@ -1435,17 +1568,82 @@ class LungNoduleBiopsyPlannerLogic(ScriptedLoadableModuleLogic, VTKObservationMi
             return None
 
     def stopWebServer(self):
-        """Termina il processo CMD del server in background."""
-        if self.server_process is not None:
-            self.server_process.terminate()  # Killa il processo
-            self.server_process = None
+        """Termina in modo robusto il processo del web server."""
+        if self.server_process is None:
+            return
 
-    def setDefaultParameters(self, parameterNode):
+        proc = self.server_process
+        self.server_process = None
+
+        try:
+            # Se il processo è ancora vivo
+            if proc.poll() is None:
+                proc.terminate()
+
+                try:
+                    # Aspetta massimo 2 secondi che termini correttamente
+                    proc.wait(timeout=2.0)
+                    logging.info("Web server subprocess terminated correctly.")
+
+                except subprocess.TimeoutExpired:
+                    # Se non termina, forza la chiusura
+                    logging.warning("Web server subprocess did not terminate. Killing it.")
+                    proc.kill()
+                    proc.wait(timeout=2.0)
+
+        except Exception as e:
+            logging.error(f"Error while stopping web server: {e}")
+
+    def killProcessUsingPort(self, port=8080):
         """
-        Initialize parameter node with default settings.
+        Forza la chiusura del processo che sta ascoltando sulla porta indicata.
+        Windows only.
+
+        Versione robusta:
+        - evita UnicodeDecodeError su Windows;
+        - considera solo processi in stato LISTENING;
+        - non usa text=True;
+        - decodifica manualmente ignorando caratteri non validi.
         """
-        if not parameterNode.GetParameter(self.ACTIVE_SERVER_CHECKBOX):
-                parameterNode.SetParameter(self.ACTIVE_SERVER_CHECKBOX, "0")
+        if os.name != "nt":
+            return
+
+        try:
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                shell=False
+            )
+
+            output = result.stdout.decode("mbcs", errors="ignore")
+
+            for line in output.splitlines():
+                line = line.strip()
+
+                if f":{port}" not in line:
+                    continue
+
+                if "LISTENING" not in line:
+                    continue
+
+                parts = line.split()
+                if len(parts) < 5:
+                    continue
+
+                pid = parts[-1]
+
+                logging.warning(f"Killing process PID {pid} using port {port}")
+
+                subprocess.run(
+                    ["taskkill", "/PID", pid, "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    shell=False
+                )
+
+        except Exception as e:
+            logging.error(f"Failed to kill process using port {port}: {e}")
 
     def updateHistLimitsFromInput(self):
         """
