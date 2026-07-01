@@ -128,28 +128,75 @@ public class PoseClient : MonoBehaviour
 
     IEnumerator CaptureLoop()
     {
+        Debug.Log("[PoseClient] CaptureLoop AVVIATO.");
+
+        int sentFrames = 0;
+        float nextDebugLogTime = 0f;
+
         while (_running)
         {
             yield return new WaitForSeconds(captureIntervalSeconds);
 
-            if (!cameraCapture.IsReady)
-                continue;
-
-            byte[] jpeg = cameraCapture.CaptureFrameAsJpeg();
-            if (jpeg == null)
-                continue;
-
-            if (metaCameraAccess == null || !metaCameraAccess.IsPlaying)
+            if (Time.time >= nextDebugLogTime)
             {
-                Debug.LogWarning("[PoseClient] PassthroughCameraAccess non pronto: salto frame.");
+                nextDebugLogTime = Time.time + 1.0f;
+
+                string metaState = metaCameraAccess == null
+                    ? "NULL"
+                    : $"IsPlaying={metaCameraAccess.IsPlaying}";
+
+                string cameraState = cameraCapture == null
+                    ? "NULL"
+                    : $"IsReady={cameraCapture.IsReady}";
+
+                Debug.Log($"[PoseClient] Loop status | running={_running} | camera={cameraState} | meta={metaState} | sentFrames={sentFrames}");
+            }
+
+            if (cameraCapture == null)
+            {
+                Debug.LogWarning("[PoseClient] cameraCapture NULL: impossibile catturare frame.");
                 continue;
             }
 
-            // Questa posa è quella della camera fisica al timestamp dell'ultimo frame camera.
+            if (!cameraCapture.IsReady)
+            {
+                // Non spammiamo: il log dettagliato sopra esce ogni 1 secondo.
+                continue;
+            }
+
+            byte[] jpeg = cameraCapture.CaptureFrameAsJpeg();
+            if (jpeg == null || jpeg.Length == 0)
+            {
+                if (Time.time >= nextDebugLogTime)
+                    Debug.LogWarning("[PoseClient] CaptureFrameAsJpeg() ha restituito null o array vuoto.");
+                continue;
+            }
+
+            if (metaCameraAccess == null)
+            {
+                Debug.LogWarning("[PoseClient] metaCameraAccess NULL: salto frame.");
+                continue;
+            }
+
+            if (!metaCameraAccess.IsPlaying)
+            {
+                // Non spammiamo: il log dettagliato sopra esce ogni 1 secondo.
+                continue;
+            }
+
             Pose cameraPoseAtFrame = metaCameraAccess.GetCameraPose();
+
+            sentFrames++;
+
+            if (logPoseData && (sentFrames <= 5 || sentFrames % 30 == 0))
+            {
+                Debug.Log($"[PoseClient] Invio frame #{sentFrames} a {_poseUrl} | jpeg={jpeg.Length} bytes");
+            }
 
             yield return StartCoroutine(SendFrame(jpeg, cameraPoseAtFrame));
         }
+
+        Debug.Log("[PoseClient] CaptureLoop TERMINATO.");
     }
 
     IEnumerator SendFrame(byte[] jpeg, Pose cameraPoseAtFrame)

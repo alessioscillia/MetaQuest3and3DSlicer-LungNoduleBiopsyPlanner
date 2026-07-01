@@ -755,28 +755,103 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             if modelName.startswith("ObstacleModel"):
                 displayNode.SetVisibility(False)
 
-    def _isRequestedAnatomySegment(self, segmentName):
-        # Convertiamo tutto in minuscolo e sostituiamo gli underscore con gli spazi 
-        # così copriamo sia "rib_1" che "rib 1"
+    def _isQuestBoneSegment(self, segmentName):
         name = segmentName.lower().replace("_", " ")
 
-        if "skin" in name or name in {"body", "body trunc"}: return True
-        if "nodule" in name: return True
-        if any(token in name for token in ["trachea", "bronch", "airway", "vessel", "blood vessel"]): return True
-        # Segmenti del task lung_vessels
-        if any(token in name for token in ["lung arteries", "lung veins", "lung airways", "lung airways wall"]): return True
-        if "lung" in name and not any(token in name for token in ["nodule", "vessel", "airway", "trachea", "bronch", "artery", "arteries", "vein", "veins"]): return True
+        # Coste
+        if "rib" in name or "costal cartilage" in name:
+            return True
 
-        # CONTROLLO OSSA CORRETTO
-        bone_keywords = [
-                "rib", "vertebra", "sternum", "clavicula", "scapula", "sacrum",
-                "humerus", "femur", "hip", "fibula", "tibia", "ulna", "radius", 
-                "skull", "patella", "bone"
-            ]
-        if any(keyword in name for keyword in bone_keywords):
+        # Sterno
+        if "sternum" in name:
+            return True
+
+        # Solo vertebre toraciche T1-T12
+        thoracic_vertebrae = [f"t{i} vertebra" for i in range(1, 13)]
+        if any(v in name for v in thoracic_vertebrae):
             return True
 
         return False
+
+    def _isRequestedAnatomySegment(self, segmentName):
+        """
+        Segmenti essenziali da esportare nel modello LITE per Meta Quest.
+        """
+        name = segmentName.lower().replace("_", " ")
+
+        # Target
+        if "nodule" in name:
+            return True
+
+        # Polmoni
+        if "lung" in name and not any(token in name for token in [
+            "nodule", "vessel", "airway", "trachea", "bronch",
+            "artery", "arteries", "vein", "veins"
+        ]):
+            return True
+
+        # Airways
+        if any(token in name for token in [
+            "trachea", "bronch", "airway"
+        ]):
+            return True
+
+        # Vasi polmonari
+        if any(token in name for token in [
+            "pulmonary artery",
+            "pulmonary arteries",
+            "pulmonary vein",
+            "pulmonary veins",
+            "lung arteries",
+            "lung veins"
+        ]):
+            return True
+
+        # Ossa toraciche utili come ostacoli
+        if self._isQuestBoneSegment(segmentName):
+            return True
+
+        return False
+    
+    def _isCalibrationSegment(self, segmentName):
+        """
+        Segmenti potenzialmente legati al volume di calibrazione.
+        Da aggiornare quando scopriamo il nome assegnato da TotalSegmentator.
+        """
+        name = segmentName.lower().replace("_", " ")
+
+        calibration_keywords = [
+            "calibration",
+            "lego",
+            "phantom",
+            "marker",
+            "fiducial",
+            "reference",
+            "cube",
+            "box",
+            "external",
+            "object"
+        ]
+
+        return any(keyword in name for keyword in calibration_keywords)
+
+
+    def _shouldExportSegmentForMode(self, segmentName, exportMode):
+        """
+        exportMode:
+        - 'editor' → esporta tutto
+        - 'quest'  → esporta solo anatomia utile + eventuale volume calibrazione
+        """
+        if exportMode == "editor":
+            return True
+
+        if exportMode == "quest":
+            return (
+                self._isRequestedAnatomySegment(segmentName)
+                or self._isCalibrationSegment(segmentName)
+            )
+
+        return True
     
     def _collectGltfExportModelNodes(self):
         exportNodes = []
@@ -807,7 +882,7 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
 
         return exportNodes
 
-    def _collectGltfExportSegments(self):
+    def _collectGltfExportSegments(self, exportMode="editor"):
         """
         Raccoglie TUTTI i segmenti di tutte le segmentazioni
         insieme al relativo colore del segmento.
@@ -839,6 +914,21 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
 
                 segmentName = segment.GetName() or ""
                 segmentNameLower = segmentName.lower()
+                # Nel modello Quest saltiamo airway wall: troppo pesante/problematico.
+                # Nel modello Editor, invece, lo lasciamo se vuoi vedere tutto.
+                if exportMode == "quest":
+                    if "airway wall" in segmentNameLower or "lung airways wall" in segmentNameLower:
+                        self.addLog(
+                            f"[QUEST EXPORT] Skip segment '{segmentName}' perché airway wall è troppo pesante/problematico."
+                        )
+                        continue
+
+                # Filtro diverso per Editor e Quest
+                if not self._shouldExportSegmentForMode(segmentName, exportMode):
+                    self.addLog(
+                        f"[{exportMode.upper()} EXPORT] Skip segment '{segmentName}' perché non necessario."
+                    )
+                    continue
                 # Evita di esportare airway wall: troppo pesante e spesso problematico in Unity.
                 if "airway wall" in segmentNameLower or "lung airways wall" in segmentNameLower:
                     self.addLog(f"Skip export segment '{segmentName}' perché airway wall è troppo pesante/problematico.")
@@ -863,11 +953,14 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
 
         return exportSegments
 
-    def exportModelsToGltf(self, outputFilePath):
+    def exportModelsToGltf(self, outputFilePath, exportMode="editor"):
         exportModelNodes = self._collectGltfExportModelNodes()
-        exportSegments = self._collectGltfExportSegments()
+        exportSegments = self._collectGltfExportSegments(exportMode=exportMode)
 
-        self.addLog(f"DEBUG: Trovati {len(exportModelNodes)} Model Node e {len(exportSegments)} Segmenti da esportare.")
+        self.addLog(
+            f"DEBUG [{exportMode.upper()}]: Trovati {len(exportModelNodes)} Model Node "
+            f"e {len(exportSegments)} Segmenti da esportare."
+        )
 
         if len(exportModelNodes) == 0 and len(exportSegments) == 0:
             raise RuntimeError("No requested anatomy/tool nodes available to export")
@@ -984,6 +1077,54 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                 return "Lung"
 
             return lower_name.replace(" ", "_")
+        def get_reduction_for_category(category, exportMode):
+            """
+            Decimazione differenziata:
+            - Editor: più qualità, più segmenti.
+            - Quest: meno vertici, più aggressiva.
+            """
+
+            if exportMode == "quest":
+                if category == "Lung":
+                    return 0.90
+
+                elif category == "Ribs":
+                    return 0.92
+
+                elif category == "Spine":
+                    return 0.90
+
+                elif category == "Sternum":
+                    return 0.85
+
+                elif category == "ClaviclesScapulae":
+                    return 0.95
+
+                elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
+                    return 0.80
+
+                elif category in ["Trachea", "Bronchi", "Airways"]:
+                    return 0.45
+
+                elif category == "nodule":
+                    return 0.40
+
+                else:
+                    return 0.85
+
+            # Editor / PC: meno aggressiva
+            if category in ["Ribs", "Spine", "Sternum", "ClaviclesScapulae"]:
+                return 0.60
+            elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
+                return 0.55
+            elif category in ["Trachea", "Bronchi", "Airways", "AirwayWall"]:
+                return 0.45
+            elif category == "Lung":
+                return 0.80
+            elif category == "nodule":
+                return 0.40
+            else:
+                return 0.75
 
         def _children_set(folderItemId):
             ids = set()
@@ -1119,7 +1260,36 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                         modelColor = d.GetColor()
                     except Exception:
                         modelColor = None
-                process_node(modelNode, modelNode.GetName(), modelColor)
+
+                category = get_clean_category(modelNode.GetName())
+
+                # Nel modello Quest decimiamo ulteriormente la skin,
+                # ma usando una copia temporanea per non rovinare il modello originale in Slicer.
+                if exportMode == "quest" and category == "skin":
+                    self.addLog("[QUEST] Creo copia temporanea della skin per decimazione extra.")
+
+                    tempSkinModel = slicer.mrmlScene.AddNewNodeByClass(
+                        "vtkMRMLModelNode",
+                        modelNode.GetName() + "_QuestTemp"
+                    )
+
+                    polyCopy = vtk.vtkPolyData()
+                    polyCopy.DeepCopy(modelNode.GetPolyData())
+                    tempSkinModel.SetAndObservePolyData(polyCopy)
+
+                    self.addLog("[QUEST] Decimazione extra skin per modello Quest, reduction=0.70")
+                    self.logic.decimate(
+                        tempSkinModel,
+                        tempSkinModel,
+                        reductionFactor=0.70,
+                        decimateBoundary=True
+                    )
+
+                    process_node(tempSkinModel, modelNode.GetName(), modelColor)
+                    slicer.mrmlScene.RemoveNode(tempSkinModel)
+
+                else:
+                    process_node(modelNode, modelNode.GetName(), modelColor)
 
             # 2) Segmenti: export uno-per-uno per mantenere mapping preciso nome->colore
             if len(exportSegments) > 0:
@@ -1144,34 +1314,11 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
                             # --- DECIMAZIONE ---
                             category = get_clean_category(segmentName)
 
-                            # Scommentare per modello non troppo decimato
-                            # if category in ["Ribs", "Spine", "Sternum", "ClaviclesScapulae"]:
-                            #     reduction = 0.60
-                            # elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
-                            #     reduction = 0.35
-                            # elif category in ["Airways", "Bronchi", "Trachea"]:
-                            #     reduction = 0.25
-                            # elif category == "Lung":
-                            #     reduction = 0.80
-                            # else:
-                            #     reduction = 0.75
-                            if category == "skin":
-                                reduction = 0.80
-                            elif category == "Lung":
-                                reduction = 0.90
-                            elif category == "Ribs":
-                                reduction = 0.75
-                            elif category in ["PulmonaryArteries", "PulmonaryVeins"]:
-                                reduction = 0.75
-                            elif category in ["Trachea", "Bronchi", "Airways"]:
-                                reduction = 0.45
-                            elif category in ["Spine", "Sternum", "ClaviclesScapulae"]:
-                                reduction = 0.65
-                            else:
-                                reduction = 0.75
+                            reduction = get_reduction_for_category(category, exportMode)
 
                             self.addLog(
-                                f"Decimazione di {segmentName} → gruppo {category}, reduction={reduction}"
+                                f"[{exportMode.upper()}] Decimazione di {segmentName} "
+                                f"→ gruppo {category}, reduction={reduction}"
                             )
 
                             self.logic.decimate(
@@ -1235,19 +1382,37 @@ class LungNoduleBiopsyPlannerWidget(ScriptedLoadableModuleWidget, VTKObservation
             selectedFile += '.glb'
 
         try:
-            self.exportModelsToGltf(selectedFile)
-            self.addLog(f"GLB exported: {selectedFile}")
-            
-            # Avvia/Aggiorna il server automaticamente
-            self.lastExportDirectory = str(Path(selectedFile).parent)
-            
+            selectedPath = Path(selectedFile)
+
+            # File FULL per Unity Editor
+            editorFile = selectedPath
+
+            # File LITE per Quest
+            questFile = selectedPath.with_name(selectedPath.stem + "_quest.glb")
+
+            self.addLog("=== EXPORT FULL PER UNITY EDITOR ===")
+            self.exportModelsToGltf(str(editorFile), exportMode="editor")
+            self.addLog(f"GLB Editor exported: {editorFile}")
+
+            self.addLog("=== EXPORT LITE PER META QUEST ===")
+            self.exportModelsToGltf(str(questFile), exportMode="quest")
+            self.addLog(f"GLB Quest exported: {questFile}")
+
+            # Avvia/Aggiorna il server automaticamente sulla cartella comune
+            self.lastExportDirectory = str(selectedPath.parent)
+
             if not self.webServerButton.isChecked():
                 self.webServerButton.setChecked(True)
             else:
                 self.logic.startWebServer(self.lastExportDirectory, port=8080)
                 self.addLog(f"Web server updated to directory: {self.lastExportDirectory}")
 
-            slicer.util.infoDisplay(f"GLB export completed and Web Server updated:\n{selectedFile}")
+            slicer.util.infoDisplay(
+                "GLB export completed and Web Server updated:\n\n"
+                f"Editor model:\n{editorFile}\n\n"
+                f"Quest model:\n{questFile}"
+            )
+
         except Exception as e:
             slicer.util.errorDisplay(f"GLB export failed: {str(e)}")
 

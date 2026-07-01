@@ -111,6 +111,7 @@ def estimate_pose():
 
     # 1. Decodifica l'immagine JPEG dal body della richiesta
     raw = request.data
+    print(f"[SERVER] /pose ricevuto | bytes={len(raw)} | debug={is_debug}", flush=True)
     if not raw:
         return jsonify({'error': 'Nessun dato ricevuto nel body'}), 400
 

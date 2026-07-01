@@ -289,7 +289,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 23aec495753b182498320eee44880890, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::MinimalModelLoader
-  modelUrl: http://127.0.0.1:8080/model.glb
+  editorModelUrl: http://127.0.0.1:8080//model.glb
+  questModelUrl: http://127.0.0.1:8080//model_quest.glb
   maxLoadAttempts: 5
   retryDelaySeconds: 0.75
   slicerPrefab: {fileID: 1627883544634291701, guid: b8074dd273cea1541a5f1f95e8cd3a2b, type: 3}
@@ -1269,6 +1270,14 @@ PrefabInstance:
     - target: {fileID: 681501340180161641, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
       propertyPath: m_AnchoredPosition.y
       value: 505
+      objectReference: {fileID: 0}
+    - target: {fileID: 803306161202800094, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: 0.055
+      objectReference: {fileID: 0}
+    - target: {fileID: 803306161202800094, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 0.499
       objectReference: {fileID: 0}
     - target: {fileID: 1202177892802785698, guid: 6b54a7a184958b741914ad73f5c820cf, type: 3}
       propertyPath: onValueChanged.m_PersistentCalls.m_Calls.Array.data[0].m_Target
@@ -3848,7 +3857,7 @@ MonoBehaviour:
   requestEyeTrackingPermissionOnStartup: 0
   requestScenePermissionOnStartup: 1
   requestRecordAudioPermissionOnStartup: 0
-  requestPassthroughCameraAccessPermissionOnStartup: 0
+  requestPassthroughCameraAccessPermissionOnStartup: 1
   _localDimming: 1
   _trackingOriginType: 1
   usePositionTracking: 1

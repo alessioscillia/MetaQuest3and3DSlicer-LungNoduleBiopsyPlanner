@@ -5,18 +5,49 @@ using System.Threading.Tasks;
 
 public class AnatomyImporter : MonoBehaviour
 {
-    public string modelUrl = "http://127.0.0.1:8080/model.glb";
+    [Header("Model URLs")]
+    [Tooltip("Modello completo usato in Unity Editor / PC.")]
+    [SerializeField] private string editorModelUrl = "http://127.0.0.1:8080/model.glb";
+
+    [Tooltip("Modello alleggerito usato su Meta Quest / Android.")]
+    [SerializeField] private string questModelUrl = "http://127.0.0.1:8080//model_quest.glb";
+
+    [Header("Loading Settings")]
     public int maxLoadAttempts = 5;
     public float retryDelaySeconds = 0.75f;
+
+    [Header("Slicer / Slice System")]
     [SerializeField] private GameObject slicerPrefab;
+
     private Renderer skinRenderer;
     private GameObject lungObject;
     private bool isLoadingModel;
-    
+
+    private string RuntimeModelUrl
+    {
+        get
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            return questModelUrl;
+#else
+            return editorModelUrl;
+#endif
+        }
+    }
+
     async void Start()
     {
         InitializeCamera();
-        await LoadGltfFromUrl(modelUrl);
+
+        string selectedModelUrl = RuntimeModelUrl;
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+        Debug.Log($"[AnatomyImporter] Running on Android/Quest. Loading QUEST model: {selectedModelUrl}");
+#else
+        Debug.Log($"[AnatomyImporter] Running in Unity Editor/PC. Loading EDITOR model: {selectedModelUrl}");
+#endif
+
+        await LoadGltfFromUrl(selectedModelUrl);
     }
     
     void InitializeCamera()
@@ -286,33 +317,62 @@ public class AnatomyImporter : MonoBehaviour
             }
             else if (lower.Contains("lung"))
             {
-                isTransparent = true;
+                isTransparent = false;
                 fallbackColor = new Color(1f, 0.4f, 0.4f, 1f);
                 lungObject = rend.gameObject;
             }
             else if (IsBoneName(lower))
             {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+                // Su Meta Quest le ossa devono partire opache:
+                // molto più leggero rispetto al rendering trasparente.
                 isTransparent = false;
-                startHidden = true;
+                fallbackColor = new Color(0.85f, 0.80f, 0.68f, 1.0f);
+            #else
+                // In Editor puoi tenerle opache o cambiarle a true se vuoi testare trasparenze.
+                isTransparent = false;
                 fallbackColor = new Color(0.9f, 0.9f, 0.8f, 1.0f);
+            #endif
+
+                startHidden = true;
             }
+            
             else if (lower.Contains("pulmonaryarter"))
             {
-                isTransparent = true;
-                startHidden = true;
+            #if UNITY_ANDROID && !UNITY_EDITOR
+                // Su Meta Quest le arterie devono partire opache:
+                isTransparent = false;
                 fallbackColor = new Color(0.8f, 0.1f, 0.1f, 1.0f); // Rosso Arterioso
+            #else       
+                isTransparent = true;
+                fallbackColor = new Color(0.8f, 0.1f, 0.1f, 1.0f); // Rosso Arterioso
+            #endif
+
+                startHidden = true;
             }
             else if (lower.Contains("pulmonaryvein"))
             {
-                isTransparent = true;
-                startHidden = true;
+            #if UNITY_ANDROID && !UNITY_EDITOR
+                // Su Meta Quest le vene devono partire opache:
+                isTransparent = false;
                 fallbackColor = new Color(0.1f, 0.4f, 0.8f, 1.0f); // Blu Venoso
+            #else
+                isTransparent = true;
+                fallbackColor = new Color(0.1f, 0.4f, 0.8f, 1.0f); // Blu Venoso
+            #endif
+                startHidden = true;
             }
             else if (lower.Contains("airways") || lower.Contains("airway") || lower.Contains("trachea") || lower.Contains("bronch"))
             {
+            #if UNITY_ANDROID && !UNITY_EDITOR
+                // Su Meta Quest le vie aeree devono partire opache:
+                isTransparent = false;
+                fallbackColor = new Color(0.6f, 0.8f, 0.9f, 1.0f); // Azzurro
+            #else
                 isTransparent = true;
-                startHidden = true;
                 fallbackColor = new Color(0.6f, 0.8f, 0.9f, 1.0f);
+            #endif
+                startHidden = true;
             }
             else if (lower.Contains("nodule"))
             {
@@ -361,9 +421,16 @@ public class AnatomyImporter : MonoBehaviour
                 mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive; 
             }
 
-            if (lower.Contains("lung") || lower.Contains("vessels") || lower.Contains("airways") || IsBoneName(lower))
+            if (isTransparent)
             {
-                mat.renderQueue = 3001;
+                if (lower.Contains("skin") || lower.Contains("body"))
+                    mat.renderQueue = 3000;
+                else
+                    mat.renderQueue = 3001;
+            }
+            else
+            {
+                mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Geometry;
             }
 
             rend.material = mat;
