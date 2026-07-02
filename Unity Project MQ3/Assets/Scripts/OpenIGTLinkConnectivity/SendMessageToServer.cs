@@ -25,6 +25,7 @@ public class SendMessageToServer : MonoBehaviour
         GameObject modelGO = model_InspectorInfo._gameObject;
         string modelColor = model_InspectorInfo._color;
         string fileName = "None"; // Name of the file to be loaded in Slicer
+        bool flipZForReslicePlane = string.Equals(modelName, "UnityReslicePlane", StringComparison.Ordinal);
         //////////////
         
 
@@ -93,7 +94,7 @@ public class SendMessageToServer : MonoBehaviour
         byte[] m21Bytes = BitConverter.GetBytes(m21);
         float m22 = matrix.GetRow(2)[2];
         byte[] m22Bytes = BitConverter.GetBytes(m22);
-        float m23 = matrix.GetRow(2)[3];
+        float m23 = flipZForReslicePlane ? -matrix.GetRow(2)[3] : matrix.GetRow(2)[3];
         byte[] m23Bytes = BitConverter.GetBytes(m23 * scaleMultiplier);
 
         // If little endian, reverse the bytes

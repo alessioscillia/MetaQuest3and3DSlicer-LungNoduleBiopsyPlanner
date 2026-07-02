@@ -126,10 +126,11 @@ public class AnatomyImporter : MonoBehaviour
             AutomateMaterialSetup(modelContainer);
             
 
-            // --- NUOVO: Nodo intermedio per il flip dell'asse X ---
-            GameObject flipNode = new GameObject("FlipNode");
+            // Nodo intermedio per la conversione visiva RAS->Unity.
+            // Il root del modello deve restare con scala positiva per non rompere grab/collider.
+            GameObject flipNode = new GameObject("SlicerToUnity_XZFlip");
             flipNode.transform.SetParent(modelContainer.transform, false);
-            flipNode.transform.localScale    = new Vector3(-1f, 1f, 1f); 
+            flipNode.transform.localScale    = new Vector3(-1f, 1f, -1f);
             flipNode.transform.localPosition = Vector3.zero;
             flipNode.transform.localRotation = Quaternion.identity;
 
