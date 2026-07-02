@@ -61,6 +61,10 @@ public class SurgicalAlignment : MonoBehaviour
     [SerializeField] private float _positionSmoothSpeed = 25f; // alzato da 15
     [SerializeField] private float _rotationSmoothSpeed = 20f; // alzato da 10
 
+    [Header("Model Orientation")]
+    [SerializeField] private bool _alignModelToQrLayout = true;
+    [SerializeField] private float _modelYawOffsetDegrees = 0f;
+
     // [NUOVO] Se true, la prima volta che aggancia fa snap istantaneo senza Lerp
     [SerializeField] private bool _snapOnFirstLock = true;
 
@@ -112,7 +116,9 @@ public class SurgicalAlignment : MonoBehaviour
             // --- PRIMO AGGANCIO: snap istantaneo se abilitato ---
             _initialSheetRot = newSheetRot;
             _targetPosition  = newCenter;
-            _targetRotation  = Quaternion.identity;
+            _targetRotation  = _alignModelToQrLayout
+                ? ApplyModelYawOffset(newSheetRot)
+                : Quaternion.identity;
 
             _patientHologram.transform.position   = _targetPosition;
             _patientHologram.transform.rotation   = _targetRotation;
@@ -124,7 +130,9 @@ public class SurgicalAlignment : MonoBehaviour
         else
         {
             _targetPosition = newCenter;
-            _targetRotation = newSheetRot * Quaternion.Inverse(_initialSheetRot);
+            _targetRotation = _alignModelToQrLayout
+                ? ApplyModelYawOffset(newSheetRot)
+                : newSheetRot * Quaternion.Inverse(_initialSheetRot);
         }
 
         Transform t = _patientHologram.transform;
@@ -331,6 +339,11 @@ public class SurgicalAlignment : MonoBehaviour
         return container;
     }
 
+    private Quaternion ApplyModelYawOffset(Quaternion qrLayoutRotation)
+    {
+        return qrLayoutRotation * Quaternion.Euler(0f, _modelYawOffsetDegrees, 0f);
+    }
+
     // ── OTTIMIZZATA: zero allocazioni per frame, usa dizionari cachati ──
     private bool TryComputeCenter(out Vector3 center, out Quaternion sheetRotation, bool logDebug)
     {
@@ -364,8 +377,6 @@ public class SurgicalAlignment : MonoBehaviour
         }
         if (bestKey == null) return false;
 
-        sheetRotation = _detectedQRs[bestKey].transform.rotation;
-
         // Sostituisce .Min(p => p.y) con loop manuale
         float robustY = float.MaxValue;
         foreach (var p in _qrPosCache.Values)
@@ -374,11 +385,68 @@ public class SurgicalAlignment : MonoBehaviour
         Vector3 Flat(Vector3 v) => new Vector3(v.x, robustY, v.z);
 
         Transform refT      = _detectedQRs[bestKey].transform;
-        Vector3 layoutRight = Vector3.ProjectOnPlane(-refT.right, Vector3.up).normalized;
-        Vector3 layoutDown  = Vector3.ProjectOnPlane(-refT.up,    Vector3.up).normalized;
+        Vector3 ProjectOrFallback(Vector3 v, Vector3 fallback)
+        {
+            v = Vector3.ProjectOnPlane(v, Vector3.up);
+            return v.sqrMagnitude > 0.0001f ? v.normalized : fallback.normalized;
+        }
+
+        Vector3 layoutRight = ProjectOrFallback(-refT.right, Vector3.right);
+        Vector3 layoutDown  = ProjectOrFallback(-refT.up,    Vector3.back);
         float   half        = _qrSize_m / 2f;
 
         bool Good(string p) => _qrQualityCache.TryGetValue(p, out float q) && q >= _qualityThreshold;
+
+        Vector3 AverageDirection(params Vector3[] directions)
+        {
+            Vector3 sum = Vector3.zero;
+            int count = 0;
+            foreach (Vector3 dir in directions)
+            {
+                Vector3 flatDir = Vector3.ProjectOnPlane(dir, Vector3.up);
+                if (flatDir.sqrMagnitude <= 0.0001f) continue;
+                sum += flatDir.normalized;
+                count++;
+            }
+
+            return count > 0 && sum.sqrMagnitude > 0.0001f
+                ? sum.normalized
+                : Vector3.zero;
+        }
+
+        Vector3 verticalUp = AverageDirection(
+            Good(_payloadTopLeft) && Good(_payloadBottomLeft)
+                ? Flat(_qrPosCache[_payloadTopLeft]) - Flat(_qrPosCache[_payloadBottomLeft])
+                : Vector3.zero,
+            Good(_payloadTopRight) && Good(_payloadBottomRight)
+                ? Flat(_qrPosCache[_payloadTopRight]) - Flat(_qrPosCache[_payloadBottomRight])
+                : Vector3.zero
+        );
+
+        Vector3 horizontalRight = AverageDirection(
+            Good(_payloadTopRight) && Good(_payloadTopLeft)
+                ? Flat(_qrPosCache[_payloadTopRight]) - Flat(_qrPosCache[_payloadTopLeft])
+                : Vector3.zero,
+            Good(_payloadBottomRight) && Good(_payloadBottomLeft)
+                ? Flat(_qrPosCache[_payloadBottomRight]) - Flat(_qrPosCache[_payloadBottomLeft])
+                : Vector3.zero
+        );
+
+        if (verticalUp != Vector3.zero)
+        {
+            layoutDown = -verticalUp;
+            layoutRight = horizontalRight != Vector3.zero
+                ? horizontalRight
+                : Vector3.Cross(Vector3.up, verticalUp).normalized;
+        }
+        else if (horizontalRight != Vector3.zero)
+        {
+            layoutRight = horizontalRight;
+            Vector3 inferredUp = Vector3.Cross(horizontalRight, Vector3.up).normalized;
+            layoutDown = -inferredUp;
+        }
+
+        sheetRotation = Quaternion.LookRotation(-layoutDown, Vector3.up);
 
         if (Good(_payloadTopLeft) && Good(_payloadBottomRight))
         { center = (Flat(_qrPosCache[_payloadTopLeft]) + Flat(_qrPosCache[_payloadBottomRight])) / 2f; return true; }
